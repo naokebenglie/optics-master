@@ -1,0 +1,4529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>光学带师</title>
+<style>
+/* ─────────────────────────────────────────────
+   光学带师 · 视觉层
+   语言：精密光学仪器面板。黄铜刻度、细发丝线、
+   表格数字、下沉式读数窗。不用玻璃拟态，不用霓虹。
+   ───────────────────────────────────────────── */
+:root{
+  /* 表面：从最深的读数窗到最亮的面板 */
+  --well:#06090c;
+  --bench:#0b0f14;
+  --plate:#11161d;
+  --plate-hi:#161c24;
+  --rule:#232b35;
+  --rule-soft:#1a212a;
+
+  /* 墨 */
+  --ink:#e3eaf2;
+  --ink-2:#9dafc0;
+  --ink-3:#6b7c8d;   /* 4.2:1 —— 说明文字用这一层 */
+  --ink-4:#5f7185;   /* 3.6:1 —— 标签/角标用这一层（原来是 #4a5764，只有 2.45:1） */
+
+  /* 黄铜 */
+  --accent:#2f6488;
+  --accent-mid:#5b9ec6;
+  --accent-hi:#8fc9ec;
+
+  /* 状态 */
+  --ok:#4fb39a;
+  --warn:#7fa8c8;
+  --bad:#d4637e;
+
+  /* 字号阶梯 */  --fs-micro:9.5px;
+  --fs-xs:11px;
+  --fs-sm:12.5px;
+  --fs-base:13.5px;
+  --fs-lg:16px;
+  --fs-num:44px;
+
+  /* 间距阶梯 4/8/12/16/24/32 */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+
+  /* 动效 token：时长按用途分三档，不要一个值套到底。
+     进场减速（到达）、离场加速（离开）、进度匀速。 */
+  --t-fast:140ms;   /* 按压、hover 反馈 */
+  --t-base:220ms;   /* 颜色/边框状态切换 */
+  --t-slow:320ms;   /* 入场位移 */
+  --e-out:cubic-bezier(.16,1,.3,1);   /* 减速：元素到位 */
+  --e-in:cubic-bezier(.4,0,1,1);      /* 加速：元素离开 */
+
+  --mono:"Cascadia Mono","SF Mono",ui-monospace,Consolas,"Courier New",monospace;
+  --sans:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,sans-serif;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+
+body{
+  background:
+    radial-gradient(140% 90% at 50% -20%, #131c26 0%, transparent 58%),
+    radial-gradient(120% 80% at 50% 120%, #0f1720 0%, transparent 55%),
+    var(--bench);
+  color:var(--ink);
+  font:var(--fs-base)/1.6 var(--sans);
+  overflow:hidden;
+  user-select:none;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* 台面颗粒：一层很淡的噪点，避免大片平涂 */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:99;opacity:.028;
+  background-image:radial-gradient(#fff .5px, transparent .5px);
+  background-size:3px 3px;
+}
+
+button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent-hi);outline-offset:3px}
+
+/* 数字一律表格化，避免跳动 */
+.num,.rx-value,.knob-val,.edge-val,.plate-val{
+  font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1;
+}
+
+#app{
+  height:100%;display:grid;
+  grid-template-rows:auto 1fr auto;
+  padding:var(--s3);
+  gap:var(--s3);
+  animation:fadeUp .5s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}}
+
+/* ── 铭牌 ───────────────────────────────────── */
+header{
+  display:flex;align-items:center;gap:var(--s5);
+  padding:var(--s2) var(--s4) var(--s3);
+  border-bottom:1px solid var(--rule);
+  position:relative;
+}
+header::after{
+  content:"";position:absolute;left:0;right:0;bottom:-3px;height:1px;
+  background:var(--rule-soft);
+}
+.brand{display:flex;align-items:baseline;gap:var(--s2)}
+.brand .zh{
+  font-size:15px;font-weight:600;letter-spacing:.22em;color:var(--accent-hi);
+}
+.brand .en{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.34em;color:var(--ink-4);
+}
+.gauge{display:flex;align-items:baseline;gap:var(--s2)}
+.gauge .k{
+  font-size:var(--fs-micro);letter-spacing:.26em;color:var(--ink-4);
+}
+.gauge .v{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:var(--fs-lg);color:var(--ink);letter-spacing:.02em;
+}
+.gauge .v.money{color:var(--accent-mid)}
+.gauge .v.acu{color:var(--ok)}
+/* 钱一变，闪一下再落回去 */
+.gauge .v.money.pulse{animation:cashPulse 460ms var(--e-out)}
+@keyframes cashPulse{
+  0%{color:var(--accent-hi);transform:translateY(-1px)}
+  100%{color:var(--accent-mid)}
+}
+.spacer{flex:1}
+.stamp{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.24em;color:var(--ink-4);
+}
+
+/* ── 主区 ───────────────────────────────────── */
+main{
+  display:grid;
+  grid-template-columns:236px minmax(0,1fr) 252px;
+  gap:var(--s3);
+  min-height:0;
+}
+
+/* 一块面板：内嵌式黄铜铭牌感 */
+.plate{
+  position:relative;
+  background:linear-gradient(180deg,var(--plate-hi),var(--plate));
+  border:1px solid var(--rule);
+  border-radius:3px;
+  box-shadow:
+    inset 0 1px 0 rgba(190,220,245,.055),
+    inset 0 -1px 0 rgba(0,0,0,.5),
+    0 8px 20px -16px #000;
+  min-height:0;
+  display:flex;flex-direction:column;
+}
+.plate-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:var(--s2) var(--s3) var(--s2);
+  border-bottom:1px solid var(--rule-soft);
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.24em;color:var(--accent);
+  flex:0 0 auto;
+}
+.plate-head .tick{
+  flex:1;height:1px;margin:0 var(--s2);
+  background:repeating-linear-gradient(90deg,var(--rule) 0 1px,transparent 1px 5px);
+  opacity:.8;
+}
+
+/* ── 处方单 ─────────────────────────────────── */
+.rx-body{padding:var(--s4) var(--s4) var(--s3);display:flex;flex-direction:column;flex:1;min-height:0}
+.rx-value{
+  font-size:var(--fs-num);line-height:1;letter-spacing:-.02em;
+  color:var(--accent-hi);
+  text-shadow:0 0 22px rgba(140,200,240,.18);
+}
+.rx-value small,.rx-value .unit{
+  font-size:13px;color:var(--ink-3);margin-left:6px;letter-spacing:.1em;font-family:var(--mono);
+}
+.rx-rule{
+  height:1px;margin:var(--s3) 0 var(--s2);
+  background:repeating-linear-gradient(90deg,var(--rule) 0 4px,transparent 4px 7px);
+}
+.rx-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:var(--fs-sm);color:var(--ink-3);
+  padding:3px 0;
+}
+.rx-row b{
+  font-weight:400;color:var(--ink-2);
+  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--fs-sm);
+}
+
+/* 顾客 */
+.cust{
+  margin-top:auto;padding-top:var(--s4);
+  border-top:1px solid var(--rule-soft);
+  display:flex;gap:var(--s3);align-items:flex-end;
+}
+.portrait{flex:0 0 46px;width:46px;height:58px}
+.portrait svg{display:block;width:100%;height:100%}
+.cust .who{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.24em;color:var(--ink-4);margin-bottom:3px;
+}
+.cust .say{
+  font-size:var(--fs-sm);line-height:1.65;color:var(--ink-2);
+  text-wrap:pretty;
+}
+
+/* ── 光路舞台：下沉读数窗 ───────────────────── */
+.stage{
+  position:relative;
+  background:
+    radial-gradient(75% 60% at 50% 42%, #0d1721 0%, var(--well) 72%);
+  border:1px solid var(--rule);
+  border-radius:3px;
+  box-shadow:
+    inset 0 2px 10px rgba(0,0,0,.85),
+    inset 0 0 0 1px rgba(0,0,0,.6);
+  overflow:hidden;
+  min-height:0;
+}
+#optics{display:block;width:100%;height:100%}
+.stage-tag{
+  position:absolute;left:12px;top:9px;
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.26em;color:var(--ink-4);pointer-events:none;
+}
+.verdict{
+  position:absolute;left:12px;right:12px;bottom:10px;
+  display:flex;align-items:center;gap:var(--s2);
+  font-size:var(--fs-sm);color:var(--ink-2);
+  pointer-events:none;
+  transition:color var(--t-base) var(--e-out);
+}
+.verdict .dot{
+  width:6px;height:6px;flex:0 0 6px;border-radius:50%;
+  background:var(--ink-4);
+  transition:background var(--t-base) var(--e-out),box-shadow var(--t-base) var(--e-out);
+}
+.verdict.pass .dot{background:var(--ok);box-shadow:0 0 9px rgba(79,179,154,.85)}
+.verdict.pass #verdictText{color:var(--ok)}
+.verdict.fail .dot{background:var(--bad);box-shadow:0 0 9px rgba(212,99,126,.75)}
+.verdict.fail #verdictText{color:var(--bad)}
+
+/* ── 右栏 ───────────────────────────────────── */
+.knobs{padding:var(--s3) var(--s4) var(--s4);gap:var(--s4)}
+.knobs > *{flex:0 0 auto}
+.field{display:flex;flex-direction:column;gap:var(--s1)}
+.field-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+}
+.field-head .n{font-size:var(--fs-sm);color:var(--ink-2)}
+.knob-val{
+  font-size:var(--fs-lg);color:var(--accent-hi);
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+}
+.field-note{
+  font-size:var(--fs-xs);color:var(--ink-4);line-height:1.55;text-wrap:pretty;
+}
+
+/* 滑块：黄铜刻度尺 */
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:22px;background:transparent;cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:3px;border-radius:0;
+  background:
+    repeating-linear-gradient(90deg,#7fa3bd 0 1px,transparent 1px 11px),
+    linear-gradient(90deg,#4a6880,#55809c);
+  background-size:100% 7px, 100% 3px;
+  background-position:0 center, 0 center;
+  background-repeat:no-repeat;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:12px;height:16px;margin-top:-7px;border-radius:1px;
+  background:linear-gradient(180deg,var(--accent-hi),#2d5d7d);
+  border:1px solid #234458;
+  box-shadow:0 0 10px -2px rgba(140,200,240,.85);
+}
+input[type=range]::-moz-range-track{
+  height:3px;background:linear-gradient(90deg,#4a6880,#55809c);
+}
+input[type=range]::-moz-range-thumb{
+  width:12px;height:16px;border-radius:1px;border:1px solid #234458;
+  background:linear-gradient(180deg,var(--accent-hi),#2d5d7d);
+}
+
+/* 锁定行 */
+.locked{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:var(--fs-sm);color:var(--ink-3);
+  padding:var(--s1) 0;border-bottom:1px dotted var(--rule-soft);
+}
+.locked b{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-weight:400;color:var(--ink-2);
+}
+
+/* 材料 */
+.mats{display:flex;flex-wrap:wrap;gap:var(--s1)}
+.mats button{
+  min-height:44px;padding:0 var(--s3);
+  font-size:var(--fs-sm);letter-spacing:.02em;
+  color:var(--ink-3);
+  border:1px solid var(--rule);
+  border-radius:2px;
+  background:linear-gradient(180deg,#151c24,#0f141a);
+  transition:border-color .12s,color .12s,background .12s;
+}
+.mats button:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}
+.mats button.on{
+  color:var(--accent-hi);
+  border-color:var(--accent);
+  background:linear-gradient(180deg,#1c3346,#132330);
+  box-shadow:inset 0 0 0 1px rgba(60,120,160,.55),0 0 12px -4px var(--accent-mid);
+}
+.mats button:disabled{
+  opacity:.3;cursor:not-allowed;text-decoration:line-through;
+}
+
+/* 边缘厚度：刻度条 */
+.edge-bar{
+  position:relative;height:10px;margin-top:var(--s1);
+  border:1px solid var(--rule);
+  background:var(--well);
+  overflow:hidden;
+}
+.edge-bar i{
+  position:absolute;left:0;top:0;bottom:0;width:0;
+  background:linear-gradient(90deg,rgba(79,179,154,.85),rgba(91,158,198,.9) 68%,rgba(212,99,126,.95));
+  transition:width .1s linear;
+}
+.edge-bar .limit{
+  position:absolute;top:-1px;bottom:-1px;left:80%;width:1px;
+  background:var(--ink-2);opacity:.7;
+}
+.edge-bar .limit::after{
+  content:"8.0";position:absolute;top:-11px;left:-7px;
+  font-family:var(--mono);font-size:8px;color:var(--ink-4);
+}
+.edge-val{
+  font-size:var(--fs-lg);color:var(--accent-hi);
+}
+.edge-val.bad{color:var(--bad)}
+
+/* ── 底栏 ───────────────────────────────────── */
+footer{
+  display:flex;align-items:center;gap:var(--s2);
+  padding:var(--s2) var(--s1) 0;
+  border-top:1px solid var(--rule);
+  position:relative;
+}
+footer::before{
+  content:"";position:absolute;left:0;right:0;top:-3px;height:1px;
+  background:var(--rule-soft);
+}
+.btn{
+  min-height:40px;padding:0 var(--s5);
+  font-size:var(--fs-base);letter-spacing:.14em;
+  color:var(--accent-hi);
+  border:1px solid #2b4c66;
+  border-radius:2px;
+  background:linear-gradient(180deg,#1a2a38,#101820);
+  box-shadow:inset 0 1px 0 rgba(190,220,245,.10),0 6px 14px -12px #000;
+  transition:.13s;
+}
+.btn:hover:not(:disabled){
+  border-color:var(--accent-mid);
+  background:linear-gradient(180deg,#233a4d,#152230);
+}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.38;cursor:not-allowed;letter-spacing:.14em}
+.btn.ghost{
+  color:var(--ink-3);border-color:var(--rule);
+  background:transparent;letter-spacing:.06em;padding:0 var(--s4);
+}
+.btn.ghost:hover:not(:disabled){color:var(--ink);border-color:var(--ink-4)}
+.hint{
+  font-family:var(--mono);font-size:var(--fs-xs);
+  letter-spacing:.06em;color:var(--ink-4);
+}
+
+/* ── 结算 / 对话层 ──────────────────────────── */
+.veil{
+  position:fixed;inset:0;display:none;place-items:center;z-index:20;
+  background:radial-gradient(70% 60% at 50% 50%,rgba(6,5,3,.72),rgba(6,5,3,.94));
+  backdrop-filter:blur(3px);
+}
+.veil.on{display:grid}
+.card{
+  width:min(420px,92vw);
+  border:1px solid #2b4258;
+  border-radius:3px;
+  background:linear-gradient(180deg,#161d26,#0d1218);
+  box-shadow:
+    inset 0 1px 0 rgba(190,220,245,.08),
+    0 40px 80px -40px #000;
+  padding:var(--s5);
+  animation:cardIn .24s cubic-bezier(.16,1,.3,1);
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px) scale(.985)}}
+.card h2{
+  margin:0 0 var(--s1);font-size:19px;font-weight:600;letter-spacing:.1em;
+}
+.card .sub{font-size:var(--fs-sm);color:var(--ink-3);margin-bottom:var(--s4)}
+.card .list{list-style:none;margin:0;padding:0}
+.card .list li{
+  padding:var(--s2) 0;border-bottom:1px dotted var(--rule);
+  font-size:var(--fs-sm);color:var(--ink-2);
+}
+.card .list li .why{
+  display:block;color:var(--ink-4);font-size:var(--fs-xs);margin-top:2px;
+}
+.card .ledger{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-top:var(--s4);padding-top:var(--s3);
+  border-top:1px solid var(--rule);
+  font-size:var(--fs-sm);color:var(--ink-3);
+}
+.card .ledger b{
+  font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums;
+}
+.card .ledger b.up{color:var(--ok)}
+.card .ledger b.down{color:var(--bad)}
+.card.lesson{border-color:#2b4c66}
+.card.lesson .tag{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.3em;color:var(--accent);margin-bottom:var(--s2);
+}
+.card.lesson p{
+  margin:0 0 var(--s3);font-size:var(--fs-base);line-height:1.8;
+  color:var(--ink);text-wrap:pretty;
+}
+.card.lesson .em{color:var(--accent-hi)}
+.card.lesson .math{
+  font-family:var(--mono);font-size:var(--fs-xs);
+  color:var(--ink-4);line-height:1.9;
+}
+
+/* ── 窄屏 ───────────────────────────────────── */
+@media (max-width:1000px){
+  #app{padding:var(--s2);gap:var(--s2)}
+  main{grid-template-columns:1fr;grid-template-rows:auto minmax(200px,1fr) auto;gap:var(--s2)}
+  .rx{flex-direction:row;flex-wrap:wrap;align-items:flex-start;gap:var(--s3);padding:var(--s3)}
+  .rx-value{font-size:30px}
+  .rx-rule,.rx-row{display:none}
+  .cust{margin:0;padding:0;border:none;flex:1 1 180px}
+  .knobs{flex-direction:row;flex-wrap:wrap;gap:var(--s3)}
+  .knobs > *{flex:1 1 130px}
+  header{gap:var(--s3);padding:var(--s1) var(--s2) var(--s2)}
+  .brand .en{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+
+/* ── 手机竖屏（375×667 起） ───────────────── */
+@media (max-width:560px){
+  header{
+    flex-wrap:wrap;gap:4px 12px;
+    padding:6px 10px 8px;align-items:baseline;
+  }
+  header .brand{gap:6px}
+  header .brand .zh{font-size:13px;letter-spacing:.14em}
+  .gauge{gap:3px;white-space:nowrap;font-size:10px}
+  .gauge .v{font-size:11px}
+  .stamp{display:none}
+  .storebtn{margin-right:0;font-size:9.5px;padding:4px 9px}
+
+  #app{padding:6px}
+  main{grid-template-rows:auto minmax(340px,1fr) auto;gap:6px}
+
+  .rx{padding:8px 10px;gap:8px}
+  .rx-value{font-size:26px}
+  .cust{flex:1 1 140px}
+  .cust .say{font-size:11px;line-height:1.55}
+  .cust .portrait{display:none}
+
+  .knobs{padding:8px 10px 10px;gap:10px}
+  .knobs > *{flex:1 1 120px}
+  .field-head .n{font-size:11px}
+  .knob-val{font-size:13px}
+
+  // 渐进片：验收牌子缩小，别盖住图
+  .palchecks{display:none}
+
+  footer{
+    gap:6px;padding:8px 10px max(10px,env(safe-area-inset-bottom));
+    flex-wrap:wrap;
+  }
+  .btn{font-size:12px;padding:9px 14px}
+  .hint{font-size:10px;flex-basis:100%;order:9}
+
+  /* 商城：卡片两栏变窄 */
+  .store{width:96vw;padding:12px}
+  .st-item{padding:7px 9px;gap:8px}
+  .st-side{width:80px;flex:0 0 80px}
+  .st-price{font-size:14px}
+  .st-buy{font-size:9px;padding:3px 7px;letter-spacing:.08em}
+  .st-note{font-size:10px}
+  .store-head .sh-wallet b{font-size:17px}
+}
+/* ── 标题页 ───────────────────────────────── */
+.veil.z3{z-index:30}
+/* 标题页用自己的不透明底，不要透出后面的工作台 */
+#title{
+  background:
+    radial-gradient(80% 62% at 50% 42%, #0e1a25 0%, #06090c 68%);
+}
+.veil.z2{z-index:25;}
+#dialogue{background:linear-gradient(180deg,rgba(6,9,12,0) 0%,rgba(6,9,12,.55) 45%,rgba(6,9,12,.92) 100%);backdrop-filter:none}
+.veil.bottom{align-items:end;padding-bottom:max(20px,env(safe-area-inset-bottom))}
+
+.title-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:var(--s4);
+  text-align:center;padding:var(--s5);
+}
+#titlefx{width:200px;height:168px;display:block}
+.title-wrap h1{
+  margin:0;font-size:33px;font-weight:600;letter-spacing:.34em;text-indent:.34em;
+  color:var(--ink);
+  opacity:0;transform:translateY(7px);
+  transition:opacity .8s ease,transform .8s cubic-bezier(.16,1,.3,1);
+}
+.title-wrap .sub{
+  font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.4em;
+  color:var(--ink-4);
+  opacity:0;transition:opacity .8s ease .18s;
+}
+.title-wrap .start{
+  opacity:0;transform:translateY(7px);
+  transition:opacity .55s ease .34s,transform .55s cubic-bezier(.16,1,.3,1) .34s;
+  margin-top:var(--s3);
+}
+#title.focused h1,#title.focused .sub,#title.focused .start{opacity:1;transform:none}
+
+/* ── 对话框 ───────────────────────────────── */
+.dlg{
+  position:relative;
+  width:min(700px,94vw);
+  display:flex;gap:var(--s4);align-items:flex-start;
+  padding:var(--s4) var(--s5);
+  border:1px solid var(--rule);
+  border-radius:3px;
+  background:linear-gradient(180deg,rgba(20,27,35,.97),rgba(11,15,20,.99));
+  box-shadow:
+    inset 0 1px 0 rgba(190,220,245,.07),
+    0 30px 60px -30px #000;
+  animation:cardIn .22s cubic-bezier(.16,1,.3,1);
+  cursor:pointer;
+}
+.dlg-portrait{flex:0 0 48px;width:48px;height:60px}
+.dlg-portrait svg{width:100%;height:100%;display:block}
+.dlg-body{flex:1;min-width:0}
+.dlg-who{
+  font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.26em;
+  color:var(--accent-mid);margin-bottom:var(--s2);
+}
+.dlg-text{
+  font-size:var(--fs-lg);line-height:1.8;color:var(--ink);
+  min-height:1.8em;text-wrap:pretty;
+}
+.dlg-text .caret{color:var(--accent-hi)}
+.dlg-skip{
+  position:absolute;right:var(--s3);top:var(--s3);
+  font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.18em;
+  color:var(--ink-4);padding:4px 6px;
+}
+.dlg-skip:hover{color:var(--ink-2)}
+
+/* ── 结算页 ───────────────────────────────── */
+.card.end .tag{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.3em;color:var(--accent);margin-bottom:var(--s2);
+}
+.card.end h2{
+  font-size:25px;letter-spacing:.18em;color:var(--accent-hi);
+  margin:0 0 var(--s2);
+}
+.end-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3) var(--s4);
+  margin:var(--s3) 0 var(--s5);
+  padding:var(--s4) 0;
+  border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);
+}
+.end-grid > div{display:flex;flex-direction:column;gap:3px}
+.end-grid span{font-size:var(--fs-micro);letter-spacing:.2em;color:var(--ink-4)}
+.end-grid b{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:19px;font-weight:400;color:var(--ink);
+}
+
+/* ── 订单板 ───────────────────────────────── */
+.board-wrap{
+  width:min(760px,94vw);
+  display:flex;flex-direction:column;gap:var(--s3);
+}
+.board-title{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.3em;color:var(--accent-mid);text-align:center;
+}
+.board-title small{
+  display:block;margin-top:6px;letter-spacing:.1em;  color:var(--ink-4);font-size:var(--fs-xs);
+}
+.board-list{display:flex;flex-direction:column;gap:var(--s2)}
+/* 微调按钮：±0.12 D 的允差只有 1~2mm 的宽度，拖动根本抠不准 */
+.nudge{display:flex;align-items:center;gap:6px}
+.nudge button{
+  width:20px;height:20px;line-height:1;padding:0;
+  font-family:var(--mono);font-size:13px;
+  color:var(--accent-hi);background:transparent;
+  border:1px solid var(--rule);border-radius:2px;cursor:pointer;
+  transition:background .1s,border-color .1s;
+}
+.nudge button:hover{background:rgba(143,201,236,.14);border-color:var(--accent)}
+.nudge button:active{background:rgba(143,201,236,.26)}
+
+/* 今天接不了的单：让玩家看见自己缺什么，而不是进了商城才知道 */
+.board-locked{
+  margin-top:var(--s3);padding-top:var(--s3);
+  border-top:1px dotted var(--rule);
+}
+.board-locked .bl-h{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;
+  color:var(--ink-4);margin-bottom:6px;
+}
+.board-locked .bl-row{
+  display:flex;align-items:baseline;gap:12px;
+  padding:4px 0;
+  font-family:var(--mono);font-size:11px;
+}
+.board-locked .bl-v{color:#6f8296;min-width:74px}
+.board-locked .bl-p{color:#4a5c6d;min-width:64px}
+.board-locked .bl-w{
+  margin-left:auto;color:#8a5f68;letter-spacing:.02em;text-align:right;
+}
+.order-card{
+  display:block;width:100%;text-align:left;
+  padding:var(--s3) var(--s4);
+  border:1px solid var(--rule);
+  border-radius:3px;
+  background:linear-gradient(180deg,rgba(22,29,38,.96),rgba(13,18,24,.98));
+  box-shadow:inset 0 1px 0 rgba(190,220,245,.06);
+  transition:border-color var(--t-fast),transform var(--t-fast),background var(--t-fast);
+  /* 入场：位移 8px、每张错 30ms、减速到位 */
+  animation:cardIn var(--t-slow) var(--e-out) both;
+  animation-delay:calc(var(--i,0) * 30ms);
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}}
+.order-card:hover{
+  border-color:var(--accent-mid);
+  background:linear-gradient(180deg,rgba(28,40,53,.98),rgba(16,23,31,1));
+  transform:translateY(-1px);
+}
+.order-card:active{transform:translateY(0)}
+.oc-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--s1)}
+.oc-sph{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:22px;color:var(--accent-hi);letter-spacing:-.01em;
+}
+.oc-sph i{font-style:normal;font-size:12px;color:var(--ink-3);margin-left:3px}
+.oc-price{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:16px;color:var(--ink-2);
+}
+.oc-line{font-size:var(--fs-sm);color:var(--ink-2);line-height:1.7;margin-bottom:var(--s2)}
+.oc-meta{
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.06em;
+  color:var(--ink-4);
+  padding-top:var(--s2);border-top:1px dotted var(--rule-soft);
+}
+.oc-meta .stars{color:var(--accent-mid);letter-spacing:.14em}
+
+.card .blank{
+  margin-top:var(--s3);padding:var(--s2) var(--s3);
+  border:1px dashed #2b4258;border-radius:2px;
+  font-size:var(--fs-xs);color:var(--ink-3);line-height:1.7;
+}
+.card .blank b{color:var(--accent-hi);font-family:var(--mono)}
+.card .blank .k{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.24em;color:var(--ink-4);margin-bottom:2px}
+
+.card .tap{
+  margin-top:var(--s3);text-align:center;
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.24em;color:var(--ink-4);
+  animation:tapPulse 1.6s ease-in-out infinite;
+}
+@keyframes tapPulse{0%,100%{opacity:.45}50%{opacity:.95}}
+
+/* 焦度计：加工时唯一的实时读数 */
+.field.focus{
+  padding:var(--s2) 0;
+  border-top:1px solid var(--rule-soft);
+  border-bottom:1px solid var(--rule-soft);
+}
+.focus-pair{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:var(--fs-sm);color:var(--ink-3);
+}
+.focus-pair b{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-weight:400;color:var(--ink-2);
+}
+.focus-dev{
+  margin-top:3px;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:var(--fs-sm);letter-spacing:.02em;
+}
+.focus-dev.ok{color:var(--ok)}
+.focus-dev.bad{color:var(--bad)}
+
+/* 词条：把 R₂ 负号和 ±0.12 允差说清楚 */
+.legend{
+  margin-top:auto;padding-top:var(--s3);
+  border-top:1px solid var(--rule-soft);
+  font-size:10px;line-height:1.75;color:var(--ink-4);
+}
+.legend b{color:var(--ink-3);font-weight:400;font-family:var(--mono)}
+
+/* 商店：打烊后花钱的地方 */
+.shop{display:flex;flex-direction:column;gap:var(--s2);margin-bottom:var(--s4)}
+.shopitem{
+  display:grid;grid-template-columns:1fr auto;gap:2px var(--s3);
+  grid-template-areas:"name price" "note price";
+  align-items:center;text-align:left;width:100%;
+  padding:var(--s2) var(--s3);
+  border:1px solid var(--accent);border-radius:2px;
+  background:linear-gradient(180deg,rgba(28,52,72,.7),rgba(16,28,38,.9));
+  color:var(--ink);cursor:pointer;transition:.12s;
+}
+.shopitem:hover:not(:disabled){background:linear-gradient(180deg,rgba(38,68,92,.9),rgba(20,36,50,1))}
+.shopitem:disabled{opacity:.38;cursor:not-allowed;border-color:var(--rule)}
+.si-name{grid-area:name;font-size:var(--fs-base);color:var(--accent-hi)}
+.si-note{grid-area:note;font-size:var(--fs-xs);color:var(--ink-4)}
+.si-price{
+  grid-area:price;font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:18px;color:var(--ink-2);
+}
+
+/* 渐进片：验收读数贴在画布右上角（那片本来就是黑的远用区） */
+.palchecks{
+  position:absolute;right:12px;top:26px;
+  display:none;flex-direction:column;gap:3px;
+  padding:7px 10px 8px;
+  border:1px solid var(--rule-soft);border-radius:2px;
+  background:rgba(9,14,20,.88);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;
+  white-space:nowrap;
+  pointer-events:none;
+}
+.palchecks.on{display:flex}
+.palchecks .pc-h{
+  font-size:9px;letter-spacing:.22em;color:var(--ink-4);
+  margin-bottom:2px;
+}
+.palchecks .pc{
+  display:grid;grid-template-columns:56px auto;gap:12px;
+  color:var(--ink-4);white-space:nowrap;
+}
+.palchecks .pc b{
+  font-weight:400;text-align:right;
+  font-variant-numeric:tabular-nums;color:var(--ink-3);
+}
+.palchecks .pc.ok b{color:var(--ok)}
+.palchecks .pc.no b{color:var(--bad)}
+/* 一项从 ✗ 翻成 ✓ 的那一下：绿闪一次，这是渐进片最关键的一刻 */
+.palchecks .pc.flip b{animation:flipOk 520ms var(--e-out)}
+@keyframes flipOk{
+  0%{color:var(--ok);transform:translateX(2px)}
+  100%{transform:none}
+}
+.palchecks .pc.ok .k::after{content:" ✓";color:var(--ok)}
+.palchecks .pc.no .k::after{content:" ✗";color:var(--bad)}
+
+.palfield{display:flex;flex-direction:column;gap:var(--s1);margin-bottom:var(--s3)}
+#palwrap{padding-top:var(--s1)}
+.palbar{
+  display:flex;align-items:center;gap:7px;margin-top:var(--s2);
+  font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--ink-4);
+}
+.palbar i{
+  flex:1;height:5px;border-radius:1px;
+  background:linear-gradient(90deg,#05080c,#0b1620,#112b3a,#1d5065,#2f7e9c,#4a9fbd,#78c4dc,#a8e2f6);
+}
+
+/* 边缘厚度公差带 */
+.edge-bar .band{
+  position:absolute;top:0;bottom:0;
+  background:rgba(143,201,236,.28);
+  border-left:1px solid rgba(143,201,236,.5);
+  border-right:1px solid rgba(143,201,236,.5);
+  width:0;
+}
+
+/* ── 报价 ─────────────────────────────────── */
+.card.quote{width:min(470px,92vw)}
+.q-tag{
+  font-family:var(--mono);font-size:var(--fs-micro);
+  letter-spacing:.3em;color:var(--accent);margin-bottom:var(--s3);
+}
+.q-line{
+  font-size:15px;line-height:1.75;color:var(--ink);
+  margin-bottom:var(--s4);text-wrap:pretty;
+}
+.q-ref{
+  font-size:var(--fs-xs);color:var(--ink-4);
+  padding-bottom:var(--s3);margin-bottom:var(--s3);
+  border-bottom:1px solid var(--rule);
+}
+.q-ref b{
+  font-family:var(--mono);color:var(--ink-2);font-weight:400;
+}
+.q-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:var(--s2);
+}
+.q-row span{font-size:var(--fs-sm);color:var(--ink-3)}
+.q-row b{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:24px;font-weight:400;color:var(--accent-hi);
+}
+.card.quote .btn{margin-top:var(--s4);width:100%;justify-content:center}
+.card.quote .btn.ghost{margin-top:var(--s2)}
+
+/* 结果卡里并进来的「学到一件事」 */
+.lesson-inline{
+  margin-top:var(--s3);padding-top:var(--s3);
+  border-top:1px dotted var(--rule);
+}
+.lesson-inline .li-tag{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.26em;
+  color:var(--accent);margin-bottom:6px;
+}
+.lesson-inline p{
+  font-size:12.5px;line-height:1.75;color:var(--ink-2);margin:0;
+  text-wrap:pretty;
+}
+.lesson-inline .li-num{
+  margin-top:8px;font-size:11px;color:var(--ink-4);line-height:1.7;
+}
+.lesson-inline .li-num .em{color:var(--accent-hi);font-family:var(--mono)}
+
+/* 商城 ───────────────────────────────── */
+.storebtn{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;
+  padding:5px 11px;margin-right:14px;
+  color:var(--accent-hi);background:transparent;
+  border:1px solid var(--accent);border-radius:2px;cursor:pointer;
+  transition:background .12s;
+}
+.storebtn:hover{background:rgba(143,201,236,.12)}
+
+.store{
+  width:min(720px,94vw);max-height:90vh;display:flex;flex-direction:column;
+  border:1px solid #2b4258;border-radius:3px;
+  background:linear-gradient(180deg,#161d26,#0d1218);
+  box-shadow:0 40px 80px -40px #000;
+  padding:var(--s5);
+  animation:cardIn .24s cubic-bezier(.16,1,.3,1);
+}
+.store-head{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  margin-bottom:var(--s3);padding-bottom:var(--s2);border-bottom:1px solid var(--rule);
+}
+.sh-title h2{margin:0;font-size:19px;font-weight:600;letter-spacing:.16em}
+.sh-sub{font-size:var(--fs-xs);color:var(--ink-4);margin-top:3px}
+.sh-wallet{text-align:right;font-family:var(--mono);font-size:var(--fs-xs);color:var(--ink-4)}
+.sh-wallet b{
+  display:block;font-size:22px;font-weight:400;
+  color:var(--accent-hi);font-variant-numeric:tabular-nums;
+}
+.store-body{overflow-y:auto;flex:1;min-height:0;padding-right:8px;margin-bottom:var(--s3)}
+.store-body::-webkit-scrollbar{width:5px}
+.store-body::-webkit-scrollbar-track{background:transparent}
+.store-body::-webkit-scrollbar-thumb{background:#243545;border-radius:3px}
+.st-group{margin-bottom:10px}
+.st-group h3{
+  margin:0 0 var(--s2);font-family:var(--mono);
+  font-size:9.5px;letter-spacing:.28em;color:var(--ink-4);font-weight:400;
+}
+.st-group h3 span{letter-spacing:.04em;color:#33414e;margin-left:10px}
+.st-item{
+  display:grid;grid-template-columns:1fr auto;gap:var(--s3);align-items:center;
+  padding:8px 12px;margin-bottom:6px;
+  border:1px solid #1d2833;border-left:2px solid #26323f;border-radius:2px;
+  background:linear-gradient(180deg,rgba(24,33,44,.85),rgba(16,23,31,.9));
+  transition:border-color var(--t-base) var(--e-out),background var(--t-base) var(--e-out);
+  animation:stIn var(--t-slow) var(--e-out) both;
+  animation-delay:calc(var(--i,0) * 30ms);
+}
+@keyframes stIn{from{opacity:0;transform:translateY(8px)}}
+/* 刚买到手：边框亮一下再落回去 */
+.st-item.just-bought{animation:stBought 620ms var(--e-out) both}
+@keyframes stBought{
+  0%{border-left-color:var(--ok);background:rgba(30,66,60,.55)}
+  100%{border-left-color:var(--ok);background:rgba(18,28,34,.7)}
+}
+.st-item:hover:not(.owned):not(.locked){border-color:#2f4a63;border-left-color:var(--accent)}
+.st-item.owned{border-left-color:var(--ok);background:rgba(18,28,34,.7)}
+.st-item.blocked{opacity:.45}
+.st-name{font-size:13px;color:var(--ink);letter-spacing:.02em}
+.st-name em{
+  font-style:normal;font-family:var(--mono);font-size:9px;
+  letter-spacing:.18em;color:var(--accent);margin-left:9px;
+}
+.st-note{font-size:11px;color:#6d7f8e;line-height:1.5;margin-top:2px}
+.st-gain{font-family:var(--mono);font-size:9.5px;color:var(--accent-mid);margin-top:3px;letter-spacing:.04em}
+.st-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px;width:104px;flex:0 0 104px}
+.st-price{font-family:var(--mono);font-size:16px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.st-buy{
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;white-space:nowrap;
+  padding:4px 10px;border:1px solid var(--accent);border-radius:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+  background:transparent;color:var(--accent-hi);cursor:pointer;transition:background .12s;
+}
+.st-buy:hover:not(:disabled){background:rgba(143,201,236,.14)}
+/* disabled 必须显式写 background：浏览器自带的 button:disabled 优先级更高，
+   不写就会露出默认的灰色实心块 */
+.st-buy:disabled{
+  background:transparent;
+  border-color:#26323f;color:var(--ink-4);cursor:not-allowed;
+}
+.st-tag{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ok);white-space:nowrap}
+
+/* 按压反馈：位移小于 1px，只改 transform，不改布局边界 */
+.btn:active,.st-buy:active,.nudge button:active,.storebtn:active,.shopitem:active{
+  transform:scale(.985);
+}
+.btn,.st-buy,.nudge button,.storebtn,.shopitem{
+  transition:background var(--t-fast) var(--e-out),
+             border-color var(--t-fast) var(--e-out),
+             color var(--t-fast) var(--e-out),
+             transform var(--t-fast) var(--e-out);
+}
+.st-tag.no{color:var(--ink-4)}
+
+/* 没买测厚仪：厚度条只留个虚影 */
+#edgefield.no-gauge .edge-bar{opacity:.45}
+#edgefield.no-gauge .band{display:none}
+
+/* ── 手机竖屏补充（放在最后，保证压得住前面同优先级的规则） ── */
+@media (max-width:560px){
+  /* 验收牌在 375 宽会盖住整张图，藏掉；改由底部那一行说「几项不过、哪几项」 */
+  .palchecks.on{display:none}
+  /* 让页面自然滚动，别把内容硬塞进 100vh；底部留出 sticky footer 的高度 */
+  #app{height:auto;min-height:100dvh;padding-bottom:78px}
+  footer{
+    position:sticky;bottom:0;z-index:5;
+    background:linear-gradient(180deg,rgba(8,11,15,0),rgba(8,11,15,.96) 34%);
+    padding-top:10px;
+    /* 安全区：刘海屏底部手势条 */
+    padding-bottom:max(10px,env(safe-area-inset-bottom));
+  }
+  /* 触控目标：± 按钮从 20 提到 34（WCAG 2.5.8 的 24px 下限之上，
+     又不至于把这一行撑开） */
+  .nudge{gap:8px}
+  .nudge button{width:34px;height:34px;font-size:16px}
+  .btn{min-height:44px}
+  input[type=range]{height:32px}
+  input[type=range]::-webkit-slider-thumb{width:18px;height:18px;margin-top:-8px}
+  .st-buy{min-height:34px;padding:7px 10px}
+  .store-body{padding-bottom:6px}
+
+  /* 商城卡片：手机上三栏挤不下，改成「文字在上、价格和按钮在下」两行 */
+  .st-item{grid-template-columns:1fr;gap:8px;padding:9px 10px}
+  .st-side{
+    width:auto;flex:0 0 auto;
+    flex-direction:row;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .st-price{font-size:15px}
+  .st-note{font-size:10px;line-height:1.55}
+}
+
+/* 触摸设备：去掉 300ms 点击延迟，且不改变布局边界 */
+button,input[type=range],.order-card,.st-item,.shopitem,.storebtn{touch-action:manipulation}
+
+/* 键盘焦点：整套界面原来一个 focus 环都没有，Tab 过去看不见自己在哪 */
+:focus-visible{
+  outline:2px solid var(--accent-mid);
+  outline-offset:2px;
+  border-radius:2px;
+}
+.order-card:focus-visible,
+.st-buy:focus-visible,
+.shopitem:focus-visible{outline-offset:1px}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <span class="zh">光学带师</span>
+      <span class="en">OPTICS&nbsp;MASTER</span>
+    </div>
+    <div class="gauge"><span class="k">第</span><span class="v" id="dayno">1</span><span class="k">天</span></div>
+    <div class="gauge"><span class="k">账上</span><span class="v money" id="cash">¥300</span></div>
+    <div class="gauge"><span class="k">视力</span><span class="v acu" id="acuity">—</span></div>
+    <div class="gauge"><span class="k">头衔</span><span class="v" id="rankTitle">学徒</span></div>
+    <div class="gauge"><span class="k">声誉</span><span class="v" id="repv">5</span></div>
+    <div class="spacer"></div>
+    <button class="storebtn" id="storeOpen">商 城</button>
+    <div class="stamp" id="oid">单号 0001</div>
+  </header>
+
+  <main>
+    <section class="plate rx">
+      <div class="plate-head"><span>处方单 / Rx</span><span class="tick"></span></div>
+      <div class="rx-body">
+        <div class="rx-value" id="sph">−2.00<small>D</small></div>
+        <div class="rx-rule"></div>
+        <div class="rx-row"><span>顾客</span><b id="cname">顾客 A</b></div>
+        <div class="rx-row"><span>中心厚度</span><b id="cthick">2.00 mm</b></div>
+        <div class="rx-row"><span>后表面</span><b id="cr2">已定型</b></div>
+        <div class="cust">
+          <div class="portrait">
+            <svg viewBox="0 0 46 58" aria-hidden="true">
+              <defs>
+                <linearGradient id="sil" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#3c4a5a"/>
+                  <stop offset="1" stop-color="#1b232c"/>
+                </linearGradient>
+              </defs>
+              <path d="M23 41c9 0 15 4 17 13l1 4H5l1-4c2-9 8-13 17-13z" fill="url(#sil)"/>
+              <path d="M17 31h12v10a6 6 0 0 1-12 0z" fill="url(#sil)"/>
+              <ellipse cx="23" cy="23" rx="12" ry="13.5" fill="url(#sil)"/>
+              <path d="M11 20c0-8 5-12 12-12s12 4 12 12c-2-4.5-6-6.5-12-6.5S13 15.5 11 20z" fill="#141a21"/>
+              <g stroke="#7fb4d8" stroke-width="1" fill="none" opacity=".8">
+                <rect x="12.8" y="20" width="8.6" height="7" rx="2.2"/>
+                <rect x="24.6" y="20" width="8.6" height="7" rx="2.2"/>
+                <path d="M21.4 23h3.2M12.8 21.5l-2.6-1M33.2 21.5l2.6-1"/>
+              </g>
+            </svg>
+          </div>
+          <div style="min-width:0">
+            <div class="who">顾客说</div>
+            <div class="say" id="cline">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <canvas id="optics" role="img" aria-label="光路图"></canvas>
+      <div class="stage-tag" id="stagetag">光路 / OPTICAL PATH</div>
+      <div class="palchecks" id="palchecks"></div>
+      <div class="verdict" id="verdict">
+        <span class="dot"></span><span id="verdictText">调节前表面，让光会聚到正确的位置</span>
+      </div>
+    </section>
+
+    <section class="plate knobs">
+      <div class="plate-head"><span>加工 / SETUP</span><span class="tick"></span></div>
+
+      <div class="field" id="r1field">
+        <div class="field-head">
+          <span class="n">前表面曲率 R₁</span>
+          <span class="nudge">
+            <button type="button" id="r1dn" title="减小 0.5 mm" aria-label="前表面曲率减小 0.5 毫米">−</button>
+            <span class="knob-val" id="r1v">—</span>
+            <button type="button" id="r1up" title="增大 0.5 mm" aria-label="前表面曲率增大 0.5 毫米">+</button>
+          </span>
+        </div>
+        <input type="range" id="r1" min="60" max="260" step="0.5" value="150">
+        <div class="field-note" id="r1note">R₁ 越小，前表面越弯。</div>
+      </div>
+
+      <div id="palwrap" style="display:none">
+        <div class="palfield">
+          <div class="field-head"><span class="n">通道长度</span><span class="knob-val" id="pcorv">18 mm</span></div>
+          <input type="range" id="pcor" min="12" max="24" step="1" value="18">
+        </div>
+        <div class="palfield">
+          <div class="field-head"><span class="n">近用区半宽</span><span class="knob-val" id="phwv">6.0 mm</span></div>
+          <input type="range" id="phw" min="4" max="9" step="0.5" value="6">
+        </div>
+        <div class="palfield">
+          <div class="field-head"><span class="n">内偏</span><span class="knob-val" id="pinv">2.5 mm</span></div>
+          <input type="range" id="pin" min="0" max="3.5" step="0.5" value="2.5">
+        </div>
+        <div class="palfield">
+          <div class="field-head"><span class="n">硬度</span><span class="knob-val" id="phdv">3.0</span></div>
+          <input type="range" id="phd" min="1.5" max="6" step="0.5" value="3">
+        </div>
+        <div class="field-note" id="palnote">通道是加光爬升最快的那一段。爬得越陡，两侧像散越大 —— Minkwitz。</div>
+        <div class="palbar"><span>0</span><i></i><span>2.8 D</span></div>
+      </div>
+
+      <div class="field focus">
+        <div class="field-head">
+          <span class="n">焦度计 · 实测</span>
+          <span class="knob-val" id="pv">—</span>
+        </div>
+        <div class="focus-pair"><span>处方</span><b id="sphv">—</b></div>
+        <div class="focus-dev" id="devv">—</div>
+      </div>
+
+      <div class="locked" id="lockr2"><span>后表面 R₂</span><b id="lr2">−62.0 mm</b></div>
+      <div class="locked" id="lockap"><span>口径</span><b>Ø55 mm</b></div>
+
+      <div class="field" id="matwrap">
+        <div class="field-head">
+          <span class="n">材料</span>
+          <span class="knob-val" id="matv">CR-39</span>
+        </div>
+        <div class="mats" id="mats"></div>
+      </div>
+
+      <div class="field" id="edgefield">
+        <div class="field-head">
+          <span class="n">边缘厚度</span>
+          <span class="edge-val" id="edgev">—</span>
+        </div>
+        <div class="edge-bar"><i id="edgefill"></i><span class="band" id="edgeband"></span><span class="limit"></span></div>
+        <div class="field-note" id="edgenote">镜框最多装 8.0 mm</div>
+      </div>
+
+      <div class="legend" id="legend">
+        <b>R₂ 负值</b> = 这一面凹向眼睛<br>
+        <b>±0.12 D</b> = 国标单光镜片顶焦度允差
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <button class="btn" id="grind">加 工</button>
+    <button class="btn ghost" id="next" style="display:none">下一单 →</button>
+    <button class="btn ghost" id="reset">重置</button>
+    <span class="hint" id="fhint">拖动滑块，看顾客能不能看清</span>
+  </footer>
+</div>
+
+<div class="veil" id="modal">
+  <div class="card" id="sheet"></div>
+</div>
+
+<div class="veil z3 on" id="title">
+  <div class="title-wrap">
+    <canvas id="titlefx" width="200" height="168"></canvas>
+    <h1>光学带师</h1>
+    <div class="sub">OPTICS MASTER / 样机 002</div>
+    <button class="btn start" id="startbtn">开 始 营 业</button>
+  </div>
+</div>
+
+<div class="veil z2 bottom" id="dialogue">
+  <div class="dlg" id="dlgBox">
+    <div class="dlg-portrait">
+      <svg viewBox="0 0 46 58" aria-hidden="true">
+        <defs>
+          <linearGradient id="boss" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#46566a"/>
+            <stop offset="1" stop-color="#1d262f"/>
+          </linearGradient>
+        </defs>
+        <path d="M23 40c10 0 17 5 19 14l1 4H3l1-4c2-9 9-14 19-14z" fill="url(#boss)"/>
+        <path d="M17 30h12v11a6 6 0 0 1-12 0z" fill="url(#boss)"/>
+        <ellipse cx="23" cy="22" rx="12" ry="13.5" fill="url(#boss)"/>
+        <path d="M10.5 19c0-8 5.5-13 12.5-13s12.5 5 12.5 13c-1.5-3-3-5-5-6-2 1.5-5 2-7.5 2s-5.5-.5-7.5-2c-2 1-3.5 3-5 6z" fill="#161d25"/>
+        <g stroke="#7fb4d8" stroke-width="1" fill="none" opacity=".75">
+          <rect x="12.8" y="19" width="8.6" height="7" rx="2.2"/>
+          <rect x="24.6" y="19" width="8.6" height="7" rx="2.2"/>
+          <path d="M21.4 22h3.2M12.8 20.5l-2.6-1M33.2 20.5l2.6-1"/>
+        </g>
+      </svg>
+    </div>
+    <div class="dlg-body">
+      <div class="dlg-who" id="dlgWho">老板</div>
+      <div class="dlg-text" id="dlgText"></div>
+    </div>
+    <button class="dlg-skip" id="dlgSkip">跳过 SKIP</button>
+  </div>
+</div>
+
+<div class="veil z3" id="ending">
+  <div class="card end">
+    <div class="tag" id="dayTag">今日结算 / DAY END</div>
+    <h2 id="endRank">—</h2>
+    <div class="sub" id="endSub"></div>
+    <div class="end-grid">
+      <div><span>账面余额</span><b id="endMoney">¥0</b></div>
+      <div><span>收入</span><b id="endRevenue">¥0</b></div>
+      <div><span>材料 + 房租</span><b id="endSpent">¥0</b></div>
+      <div id="endShopCell" style="display:none"><span>其中商城</span><b id="endShop">¥0</b></div>
+      <div><span>做废</span><b id="endFails">0</b></div>
+      <div><span>平均视力</span><b id="endAcu">—</b></div>
+      <div><span>声誉</span><b id="endRep">5</b></div>
+    </div>
+    <div class="shop" id="shop"></div>
+    <button class="btn" id="again">再 来 一 天</button>
+  </div>
+</div>
+
+<div class="veil z2" id="board">
+  <div class="board-wrap">
+    <div class="board-title">
+      <span id="boardTitle">今天的单子</span>
+      <small id="boardSub">三张里挑一张，没接的两位今天不候　·　● 是难度，●●● 最难</small>
+    </div>
+    <div class="board-list" id="boardList"></div>
+    <div class="board-locked" id="boardLocked"></div>
+  </div>
+</div>
+
+<div class="veil z2" id="quote">
+  <div class="card quote" id="quoteCard"></div>
+</div>
+
+<div class="veil z3" id="store">
+  <div class="store">
+    <div class="store-head">
+      <div class="sh-title">
+        <h2>商 城</h2>
+        <div class="sh-sub">资质 · 工作台 · 门店，一律明码标价</div>
+      </div>
+      <div class="sh-wallet"><span>账上</span><b id="storeCash">¥0</b></div>
+    </div>
+    <div class="store-body" id="storeBody"></div>
+    <button class="btn" id="storeClose">关 闭</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+// ── core.mjs ──
+// 光学内核：纯函数、零依赖、可直接在 Node 里跑测试。
+// 所有长度单位 mm，光焦度单位 D（屈光度 = 1/m）。
+//
+// 符号约定（验光行业习惯）：
+//   Rx < 0  近视镜（负透镜，中间薄边缘厚，把光发散开）
+//   Rx > 0  远视镜（正透镜，中间厚边缘薄，把光会聚）
+//   R1      前表面曲率半径，正数 = 凸向物方（眼镜朝外面那侧）
+//   R2      后表面曲率半径，负数 = 凹向像方（眼镜朝眼睛那侧）
+//
+// 厚透镜后顶焦度（验光行业标准形式，含 shrinkage 项）：
+//   P1 = (n-1)/R1,  P2 = (n-1)/R2
+//   P  = P1 + P2 - (t/n)·P1·P2
+//   Pv = P / (1 - (t/n)·P1)      ← 处方单上写的就是这个数
+//
+// 参考：CVI Melles Griot《Fundamental Optics》厚透镜公式；
+//       Vision Expo East《Advanced Optical Formulae》shrinkage/Ms 一节。
+
+/**
+ * 厚透镜后顶点光焦度。R1、R2、t 均为 mm。
+ * @returns {{P1:number,P2:number,P:number,Pv:number}}
+ */
+function vertexPower(R1, R2, t, n) {
+  const P1 = ((n - 1) / R1) * 1000;
+  const P2 = ((n - 1) / R2) * 1000;
+  const k = t / 1000 / n; // shrinkage 系数 t/n（米制）
+  const P = P1 + P2 - k * P1 * P2;
+  const Pv = P / (1 - k * P1);
+  return { P1, P2, P, Pv };
+}
+
+/** 薄透镜近似，只作对照组（用来显示"厚度不计"会差多少）。 */
+function thinPower(R1, R2, n) {
+  return (n - 1) * (1 / R1 - 1 / R2) * 1000;
+}
+
+/**
+ * 由处方（后顶焦度）解析反解后表面曲率半径 R2。
+ * 已知 R1、t、n，求使 vertexPower(...).Pv === target 的 R2。等价于验光里的 sag-fitting。
+ * 推导：Pv(1-kP1) = P1 + P2(1-kP1)  ⇒  P2 = (Pv(1-kP1) - P1)/(1-kP1)
+ */
+function solveR2(target, R1, t, n) {
+  const P1 = ((n - 1) / R1) * 1000;
+  const k = t / 1000 / n;
+  const P2 = (target * (1 - k * P1) - P1) / (1 - k * P1);
+  return ((n - 1) * 1000) / P2;
+}
+
+/**
+ * 表面矢高（sag）：半径 r 处的轴向凹陷量。sag = |R| - sqrt(R² - r²)
+ */
+function sagOf(R, r) {
+  const a = Math.abs(R);
+  if (r >= a) return NaN;
+  return a - Math.sqrt(a * a - r * r);
+}
+
+/**
+ * 边缘厚度 = 中心厚度 + 后表面矢高 − 前表面矢高。
+ * 符号：R1>0（前表面凸）和 R2<0（后表面凹）时两者矢高都为正，符合近视镜的几何。
+ * 这是"厚度"真正起作用的战场：负透镜边缘会变厚，装不进镜框就废单。
+ */
+function edgeThickness(R1, R2, t, semiDia) {
+  const s1 = sagOf(R1, semiDia);
+  const s2 = sagOf(R2, semiDia);
+  return t + s2 - s1;
+}
+
+/**
+ * 单次球面折射（Snell 矢量式）。光路图后续做真实球差时用。
+ * 返回 null 表示全反射。
+ */
+function refract(dx, dy, nx, ny, n1, n2) {
+  const len = Math.hypot(dx, dy);
+  dx /= len; dy /= len;
+  const eta = n1 / n2;
+  const cosi = -(nx * dx + ny * dy);
+  const k = 1 - eta * eta * (1 - cosi * cosi);
+  if (k < 0) return null;
+  const c = eta * cosi - Math.sqrt(k);
+  return [eta * dx + c * nx, eta * dy + c * ny];
+}
+
+/** 常用镜片材料。maxMinus / maxPlus 是该材料在常规工艺下"还能做出来的"度数极限。 */
+const MATERIALS = [
+  { id: "cr39", name: "CR-39", n: 1.498, maxMinus: -6.0, maxPlus: +8.0, cost: 40, minCenter: 2.0 },
+  { id: "mr8", name: "1.60 MR-8", n: 1.601, maxMinus: -9.0, maxPlus: +9.0, cost: 110, minCenter: 1.5 },
+  { id: "mr7", name: "1.67 MR-7", n: 1.669, maxMinus: -12.0, maxPlus: +8.0, cost: 220, minCenter: 1.2 },
+];
+const TOLERANCE_D = 0.12; // 国标单光镜片顶焦度允差
+const SEMI_DIA = 27.5; // 55mm 镜片半口径
+const FRAME_MAX_EDGE = 8.0; // 普通塑料框能容纳的最大边缘厚度
+const MIN_EDGE = 1.0; // 成品最薄处（边缘）硬性下限
+
+
+// ── eye.mjs ──
+// 简化眼（reduced eye）+ 镜片 → 视网膜成像
+//
+// 为什么需要这一层：
+//   镜片本身的光焦度玩家看不见（−2.00D 的镜片焦距 500mm，真实镜片只有 2mm 厚，
+//   偏折在图上是一个像素）。玩家真正能感知的不是"镜片弯了多少"，
+//   而是"顾客到底看不看得清"。所以把整条链路算到视网膜上，用糊圈当反馈。
+//
+// 模型（Gullstrand 简化眼）：
+//   n' = 1.336（玻璃体），正视眼总光焦度 P0 = 60D
+//   → 视网膜位置 L = n'/P0 = 22.27mm（角膜主平面之后）
+//   近视眼的眼轴相对 P0 偏长，等效为"眼的光焦度整体偏强"：
+//   P_eye = P0 − 处方球镜度
+//     （处方 −2.00D 的近视眼，等效光焦度 62D；戴上 −2.00D 镜片后，
+//      镜片的 −2.00D 把它抵回 60D，光重新落在视网膜上）
+//
+// 镜片到角膜的顶点距离 12mm：这一段的聚散度换算
+//   V_eye = V_lens / (1 − d·V_lens)
+//
+// 参考：Gullstrand 简化眼；顶点距离换算见任何验光学教材的"有效屈光力"一节。
+const EYE = {
+  n: 1.336,
+  P0: 60,          // 正视眼总光焦度 D
+  pupil: 3.0,      // 瞳孔直径 mm
+  vertex: 12,      // 镜片后顶点到角膜 mm
+  dof: 0.035,      // 焦深 mm（≈0.09D）—— 视网膜上的焦点误差小于它就看不出来
+};
+
+/** 视网膜到角膜主平面的距离 mm（正视眼）。 */
+const RETINA_MM = (EYE.n / EYE.P0) * 1000; // ≈ 22.27
+
+/** 弧度 → 角分 */
+const TO_ARCMIN = (180 / Math.PI) * 60;
+
+/**
+ * 从"实测镜片光焦度"和"处方球镜度"推到视网膜上的像。
+ *
+ * @param {number} lensPower  实测后顶焦度 D（ev.Pv）
+ * @param {number} sph        处方球镜度 D（负=近视）
+ * @returns {{
+ *   vmm:number, err:number, blurMm:number, blurArcmin:number,
+ *   acuity:number, sharp:boolean, focusBehind:boolean, noFocus:boolean
+ * }}
+ */
+function eyeState(lensPower, sph) {
+  const d = EYE.vertex / 1000;
+  const VL = lensPower;
+  const denom = 1 - d * VL;
+  // 顶点距离换算；分母接近 0 说明镜片太强、像平面跑到无穷远，按"无焦点"处理
+  const VE = Math.abs(denom) < 1e-6 ? NaN : VL / denom;
+
+  // 处方的"度"是写在镜片平面上的。要让它正好矫正这只眼睛，
+  // 眼睛的等效过强量必须等于「处方镜片到达角膜时的有效聚散度」，而不是处方数字本身。
+  // 少了这一步，一片做得完全正确的 −5.00 镜片也会显示轻微模糊。
+  const denomP = 1 - d * sph;
+  const Peye = EYE.P0 - (Math.abs(denomP) < 1e-6 ? sph : sph / denomP);
+
+  const Vtot = VE + Peye;
+
+  let vmm;
+  let noFocus = false;
+  if (!Number.isFinite(Vtot) || Math.abs(Vtot) < 0.75) {
+    noFocus = true;
+    vmm = NaN;
+  } else {
+    vmm = (EYE.n / Vtot) * 1000;
+    if (vmm <= 0) noFocus = true; // 发散，虚像
+  }
+
+  // 糊圈直径：从瞳孔边缘射向像点的光，在视网膜截面上的展开量。
+  // 先扣掉焦深 —— 焦点误差小于焦深时，视网膜上的斑点不扩散，人眼也看不出来。
+  let blurMm;
+  if (noFocus) {
+    blurMm = EYE.pupil; // 最大糊圈 = 瞳孔本身
+  } else {
+    const excess = Math.max(0, Math.abs(RETINA_MM - vmm) - EYE.dof);
+    blurMm = (EYE.pupil * excess) / Math.abs(vmm);
+  }
+  blurMm = Math.min(blurMm, EYE.pupil * 1.5);
+
+  const blurArcmin = (blurMm / RETINA_MM) * TO_ARCMIN;
+  // 视力 ≈ 1 / 最小可分辨角（角分）。1' 对应 1.0，以此类推。
+  const acuity = blurArcmin < 0.02 ? 2.0 : Math.min(2.0, Math.max(0.02, 1 / blurArcmin));
+
+  return {
+    vmm,
+    err: Number.isFinite(vmm) ? RETINA_MM - vmm : NaN, // >0：焦点落在视网膜前
+    blurMm,
+    blurArcmin,
+    acuity,
+    sharp: acuity >= 1.0,
+    focusBehind: Number.isFinite(vmm) && vmm > RETINA_MM,
+    noFocus,
+  };
+}
+
+
+// ── geom.mjs ──
+// 光路几何：把光学参数映射成「能画出来的东西」。
+// 纯几何、不碰 DOM；canvas 只负责把这里吐出的点连起来。
+//
+// 坐标系：x 向右（光传播方向），y 向上，原点在镜片前顶点（中心）。单位 mm。
+//
+// 符号约定（与 core.mjs 一致）：
+//   R1 > 0  前表面凸向物方；R2 < 0  后表面凹向像方
+//   近视镜：前表面微凸、后表面深凹，中间薄边缘厚
+//   远视镜：前表面深凸、后表面缓凹，中间厚边缘薄
+//
+// ── 求交为什么用"矢高二分"而不是球面求根 ──
+// 近视镜后表面半径小、球心在镜片外左侧，球心到入点的距离甚至大于半径，
+// 从入点出发的两个根全为负 —— 球面求根在这种几何下会直接失效。
+// 而 "x = f(y)" 形式在镜片轴向区间内是良态的，二分稳定。
+// 所以剖面和光线都用 f(y)：一套几何，不会打架。
+
+/** 前表面在高度 y 处的 x 坐标。 */
+function frontX(R1, y) {
+  const s = sagOf(R1, Math.abs(y));
+  return Number.isFinite(s) ? (R1 > 0 ? s : -s) : NaN;
+}
+
+/** 后表面在高度 y 处的 x 坐标：中心 x=t，边缘向像方退 sag。 */
+function backX(R2, t, y) {
+  const s = sagOf(R2, Math.abs(y));
+  return Number.isFinite(s) ? t + s : NaN;
+}
+
+/** 镜片剖面轮廓（画图用）。 */
+function lensProfile(R1, R2, t, semiDia, steps = 28) {
+  const front = [];
+  const back = [];
+  for (let i = 0; i <= steps; i++) {
+    const y = -semiDia + (2 * semiDia * i) / steps;
+    front.push({ x: frontX(R1, y), y });
+    back.push({ x: backX(R2, t, y), y });
+  }
+  return { front, back, semiDia };
+}
+
+/**
+ * 平行光追迹。
+ *
+ * 旁轴（real=false）：所有光线交于后顶点焦点，距离 1/|Pv|。
+ * 真实（real=true）：逐面 Snell 折射，能看到球差。
+ */
+function traceRays(R1, R2, t, n, semiDia, opts = {}) {
+  const { real = false, startX = -55, endX = null } = opts;
+  const hs = opts.rayHeights || [0, semiDia * 0.55, semiDia * 0.85];
+
+  const { Pv } = vertexPower(R1, R2, t, n);
+  const fBack = Pv !== 0 ? (-1 / Pv) * 1000 : Infinity;
+  const tail = Number.isFinite(fBack) ? Math.max(Math.abs(fBack), 40) + 45 : 200;
+  const end = endX == null ? t + tail : endX;
+
+  if (!real) {
+    const fx = t + fBack;
+    const bounded = Math.abs(fx - t) < 4000;
+    const rays = hs.map((h) => {
+      const base = [
+        { x: startX, y: h },
+        { x: frontX(R1, h), y: h },
+        { x: backX(R2, t, h), y: h },
+      ];
+      if (!bounded) return base;
+      const slope = fx === t ? 0 : (0 - h) / (fx - t);
+      return [...base, { x: fx, y: 0 }, { x: end, y: slope * (end - fx) }];
+    });
+    return { rays, focus: bounded ? { x: fx, y: 0 } : null, fBack, end, bounded };
+  }
+
+  // ── 真实球面折射 ──
+  const rays = [];
+  for (const h of hs) {
+    const pts = [{ x: startX, y: h }];
+    const dir = [1, 0];
+
+    const h1 = hitFx(startX, h, dir, (y) => frontX(R1, y), 120);
+    if (!h1) { rays.push(pts); continue; }
+    pts.push(h1);
+    const n1 = [(h1.x - R1) / Math.abs(R1), h1.y / Math.abs(R1)];
+    const d1 = refract(dir[0], dir[1], n1[0], n1[1], 1.0, n);
+    if (!d1) { rays.push(pts); continue; }
+
+    const h2 = hitFx(h1.x, h1.y, d1, (y) => backX(R2, t, y), 20);
+    if (!h2) { rays.push(pts); continue; }
+    pts.push(h2);
+    const n2 = [(h2.x - (t + R2)) / Math.abs(R2), h2.y / Math.abs(R2)];
+    const d2 = refract(d1[0], d1[1], n2[0], n2[1], n, 1.0);
+    if (!d2 || d2[0] <= 1e-6) { rays.push(pts); continue; }
+
+    // 出射光线。真实模式下渲染器会把它拉成"球差扇形"，所以这里只给方向与起点。
+    rays.push({
+      pts,
+      origin: h2,
+      dir: d2,
+      mirror: { ox: h2.x - t, oy: h2.y, dir: d2 },
+    });
+  }
+
+  const real_rays = rays.filter((r) => r.pts);
+  return {
+    rays,                     // 带 dir 的完整记录（给渲染器画球差）
+    focus: null,              // 真实焦斑不取单点，见 spot
+    fBack,
+    end,
+    spot: spotStats(real_rays, t),
+  };
+}
+
+/** 真实焦斑：三条出射光线与"最佳焦面"的交点分布。 */
+function spotStats(rays, t) {
+  const withDir = rays.filter((r) => r.dir);
+  if (withDir.length < 2) return { x: NaN, ys: [], spread: 0 };
+  // 取两条光线交点作为参考焦面
+  let fx = NaN;
+  if (withDir.length >= 2) {
+    const [a, b] = withDir;
+    const p = intersectRay(a.origin, a.dir, b.origin, b.dir);
+    if (p && p.x > t) fx = p.x;
+  }
+  if (!Number.isFinite(fx)) {
+    // 用轴上光线与第一条光线求交
+    fx = withDir[0].origin.x - (withDir[0].origin.y / (withDir[0].dir[1] / withDir[0].dir[0]));
+  }
+  const ys = withDir.map((r) => {
+    const s = (fx - r.origin.x) / r.dir[0];
+    return r.origin.y + r.dir[1] * s;
+  });
+  const spread = Math.max(...ys) - Math.min(...ys);
+  return { x: fx, ys, spread };
+}
+
+function intersectRay(p1, d1, p2, d2) {
+  const den = d1[0] * d2[1] - d1[1] * d2[0];
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((p2.x - p1.x) * d2[1] - (p2.y - p1.y) * d2[0]) / den;
+  return { x: p1.x + d1[0] * t, y: p1.y + d1[1] * t };
+}
+
+/** 从 (x0,y0) 沿 dir 走，求与曲面 x = f(y) 的第一次穿越。 */
+function hitFx(x0, y0, dir, f, maxLen) {
+  const [dx, dy] = dir;
+  if (Math.abs(dx) < 1e-12) return null;
+  const g = (s) => {
+    const sx = f(y0 + dy * s);
+    return Number.isFinite(sx) ? x0 + dx * s - sx : null;
+  };
+  const STEP = 0.005;
+  let prevS = 0;
+  let prev = g(0);
+  if (prev == null) return null;
+  if (prev > 0) return { x: x0, y: y0 };
+  for (let s = STEP; s <= maxLen; s += STEP) {
+    const cur = g(s);
+    if (cur == null) return null;
+    if (cur >= 0) {
+      let a = prevS, b = s;
+      for (let m = 0; m < 40; m++) {
+        const mid = (a + b) / 2;
+        const gm = g(mid);
+        if (gm == null) break;
+        if (gm >= 0) b = mid; else a = mid;
+      }
+      const ss = (a + b) / 2;
+      return { x: x0 + dx * ss, y: y0 + dy * ss };
+    }
+    prevS = s; prev = cur;
+  }
+  return null;
+}
+
+function refract(dx, dy, nx, ny, n1, n2) {
+  const len = Math.hypot(dx, dy);
+  dx /= len; dy /= len;
+  let cosi = -(nx * dx + ny * dy);
+  if (Math.abs(cosi) < 1e-12) return null;
+  if (cosi < 0) { nx = -nx; ny = -ny; cosi = -cosi; }
+  const eta = n1 / n2;
+  const k = 1 - eta * eta * (1 - cosi * cosi);
+  if (k < 0) return null;
+  const c = eta * cosi - Math.sqrt(k);
+  return [eta * dx + c * nx, eta * dy + c * ny];
+}
+
+
+// ── pal.mjs ──
+// 渐进多焦点（PAL）片：面形 → 主曲率 → 屈光力 / 像散分布。
+// 纯函数、零依赖、Node 里可测；canvas 只负责把返回的网格画出来。
+//
+// ── 坐标系（镜片局部，单位 mm）──
+//   x  水平，+x 朝颞侧（镜片中心为 0）
+//   y  竖直，+y 向上；远用区在上，近用区在下，配镜十字在原点
+//   z  矢高，+z 朝物方
+//
+// ── 构造（"变焦柱面"）──
+//   曲率场  κ(ξ,y) = Δκ · u(y) · w(ξ,y)
+//     Δκ = ADD / (1000·(n−1))      加光度换算成曲率，单位 1/mm
+//     u(y)  沿通道的斜坡：y ≥ 0 为 0，向下 corridor 毫米内升到 1
+//     w     横向窗口 exp(−|(ξ − xc)/h|^p)，xc = 内偏 · u(y)
+//   矢高    z(x,y) = hgt(y) + ∫₀ˣ (x − ξ)·κ(ξ,y) dξ
+//     其中 hgt''(y) = Δκ·u(y)，也就是"走廊中心处的曲率"。
+//     这一项是设计意图而不是巧合：它让走廊本身成为脐点带
+//     （两个主曲率相等 ⇒ 像散为零）。
+//
+// ── 像散是算出来的，不是画出来的 ──
+//   离走廊 |x| 处 z_xy = κ'·x ≠ 0 ⇒ 主方向旋转 ⇒ 两个主曲率劈开。
+//   一阶展开正好是 Minkwitz 定理：像散 ≈ 2·|dP/dy|·|x|。
+//   通道上加光变化越快，两侧像散越大 —— 渐进片天生的取舍，不是配错。
+const PAL_SEMI = 27.5;   // 55 mm 镜片半径
+const PAL_INDEX = 1.6;   // 折射率
+const PAL_GRID = 161;    // 默认网格（161²，中心点正好落在 x=y=0）
+const PAL_DEFAULTS = Object.freeze({
+  add: 2.0,        // 加光度 D
+  corridor: 18,    // 通道长度 mm（配镜十字 → 近用区参考点）
+  inset: 2.5,      // 内偏 mm
+  halfWidth: 6.0,  // 近用区/通道半宽 mm
+  hardness: 3.0,   // 横向窗口陡度指数，越大越"硬"
+});
+
+const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+// 五次平滑（smootherstep）：两端的一阶、二阶导数都为 0。
+// 用三次 smoothstep 会在斜坡两端留一个 u'' 跳变，而曲率对 u'' 是敏感的 ——
+// 那个跳变会顺着矢高积分放大成 2 D 以上的假像散。必须要 C²。
+const smootherstep = (t) => { const s = clamp01(t); return s * s * s * (s * (s * 6 - 15) + 10); };
+
+/** 加光沿 y 的斜坡：配镜十字以上为 0，向下 corridor 毫米内升到 1。 */
+function addRamp(y, corridor) {
+  if (y >= 0) return 0;
+  return smootherstep(-y / corridor);
+}
+
+/** 横向窗口：|d|^p 的高斯族，p 越大过渡越陡（硬设计）。 */
+function lateralWindow(d, p) {
+  return Math.exp(-Math.pow(Math.abs(d), p));
+}
+
+/** 外围补偿环：加光必须在镜片边缘"收回来"，否则整片会往一边翘。 */
+function compensateRing(d) {
+  return Math.exp(-Math.pow((Math.abs(d) - 2.6) / 3.0, 2));
+}
+
+/**
+ * 沿 x 的总量必须为零。
+ * 否则矢高沿 x 只增不减，整片的 y 曲率会被"加成总量 × 力臂"污染：
+ * 通道两端 u''≠0 的地方像散会飙到 5 D 以上 —— 那是构造函数自己造出来的假象。
+ * 加一个外围负环之后，通道仍然是正的加光，周边则轻微负向，正好是真实渐进片的形状。
+ */
+function ringAlpha(p, halfWidth, semi) {
+  const dmax = semi / halfWidth;
+  let ig = 0, ir = 0;
+  const h = 0.01;
+  for (let d = 0; d <= dmax; d += h) {
+    ig += lateralWindow(d, p);
+    ir += compensateRing(d);
+  }
+  return ig / ir;
+}
+
+/**
+ * 算一张渐进片的面形与像散分布。
+ * @param {{add:number,corridor:number,inset:number,halfWidth:number,hardness:number}} params
+ * @param {{n?:number,semi?:number,index?:number}} opts
+ * @returns {{n:number,semi:number,step:number,params:object,
+ *            power:Float64Array,astig:Float64Array,stats:object}}
+ */
+function palMap(params = {}, opts = {}) {
+  const p = { ...PAL_DEFAULTS, ...params };
+  const n = opts.n ?? PAL_GRID;
+  const semi = opts.semi ?? PAL_SEMI;
+  const index = opts.index ?? PAL_INDEX;
+  const step = (2 * semi) / (n - 1);
+  const mid = (n - 1) >> 1;
+  const dk = p.add / (1000 * (index - 1));   // 1/mm
+  const k2d = 1000 * (index - 1);            // 1/mm → D
+
+  // 两个方向同间距，共用一套坐标
+  const coord = new Float64Array(n);
+  for (let i = 0; i < n; i++) coord[i] = -semi + i * step;
+
+  // ── 每行的加光比例与走廊横坐标 ──
+  const uRow = new Float64Array(n);
+  const xcRow = new Float64Array(n);
+  for (let j = 0; j < n; j++) {
+    uRow[j] = addRamp(coord[j], p.corridor);
+    xcRow[j] = p.inset * uRow[j];
+  }
+
+  // 归一化后的横向窗口：w(0) = 1（走廊中心拿满加光），且 ∫w dx = 0（边缘收得回来）
+  const alpha = ringAlpha(p.hardness, p.halfWidth, semi);
+  const norm = 1 - alpha * compensateRing(0);
+  const win = (d) => (lateralWindow(d, p.hardness) - alpha * compensateRing(d)) / norm;
+
+  // ── hgt(y)：从 y = 0 向两侧做二重积分，使 hgt'' = Δκ·u(y) ──
+  // y > 0 一侧 u = 0 ⇒ hgt = 0；只往下积。
+  const hgt = new Float64Array(n);
+  let slope = 0;
+  for (let j = mid; j > 0; j--) {
+    const hpp = dk * uRow[j];
+    const slopeNext = slope - step * hpp;
+    hgt[j - 1] = hgt[j] - step * (slope + slopeNext) * 0.5;
+    slope = slopeNext;
+  }
+
+  // ── 逐行沿 x 二次积分得到矢高 ──
+  const z = new Float64Array(n * n);
+  const kf = new Float64Array(n);
+  const s1 = new Float64Array(n);
+  const s2 = new Float64Array(n);
+
+  for (let j = 0; j < n; j++) {
+    const u = uRow[j];
+    const xc = xcRow[j];
+    if (u === 0) continue; // 远用区就是平面，省一次积分
+    for (let i = 0; i < n; i++) {
+      kf[i] = dk * u * win((coord[i] - xc) / p.halfWidth);
+    }
+    // 先把积分从镜片中心做起（网格原点固定，保证 y 方向连续），
+    // 再减掉"从走廊中心起积"的那部分：
+    //   ∫_xc^x (x−ξ)κ dξ = x·(S1(x) − S1(xc)) − S2(x) + S2(xc)
+    // 窗口是零均值偶函数，所以这条曲线在两个边缘都精确回到 0，整片不会往一边翘。
+    s1[mid] = 0; s2[mid] = 0;
+    for (let i = mid + 1; i < n; i++) {
+      s1[i] = s1[i - 1] + step * (kf[i] + kf[i - 1]) * 0.5;
+      s2[i] = s2[i - 1] + step * (coord[i] * kf[i] + coord[i - 1] * kf[i - 1]) * 0.5;
+    }
+    for (let i = mid - 1; i >= 0; i--) {
+      s1[i] = s1[i + 1] - step * (kf[i] + kf[i + 1]) * 0.5;
+      s2[i] = s2[i + 1] - step * (coord[i] * kf[i] + coord[i + 1] * kf[i + 1]) * 0.5;
+    }
+
+    // S1(xc)、S2(xc) 用解析求积直接算，不从网格插值 ——
+    // 网格插值在整格交界处会让二阶导跳一下，走廊上会冒出一串 0.7 D 的假像散点。
+    const hw = p.halfWidth;
+    const hi = xc / hw;
+    let A = 0, B = 0;
+    const Q = 48, dq = hi / Q;
+    for (let k = 0; k < Q; k++) {
+      const d0 = -hi + k * dq, d1 = d0 + dq;
+      A += (win(d0) + win(d1)) * 0.5 * dq;
+      B += (d0 * win(d0) + d1 * win(d1)) * 0.5 * dq;
+    }
+    A *= hw;
+    const s1m = dk * u * A;
+    const s2m = dk * u * (xc * A + hw * hw * B);
+
+    const base = j * n;
+    for (let i = 0; i < n; i++) {
+      z[base + i] = hgt[j] + coord[i] * (s1[i] - s1m) - s2[i] + s2m;
+    }
+  }
+
+  // ── 第一、第二基本形式 → 主曲率 ──
+  const power = new Float64Array(n * n).fill(NaN);
+  const astig = new Float64Array(n * n).fill(NaN);
+  const inv2h = 1 / (2 * step);
+  const invH2 = 1 / (step * step);
+  const R2 = semi * semi;
+
+  for (let j = 1; j < n - 1; j++) {
+    const y = coord[j];
+    for (let i = 1; i < n - 1; i++) {
+      const x = coord[i];
+      if (x * x + y * y > R2) continue;
+      const c = j * n + i;
+      const zx = (z[c + 1] - z[c - 1]) * inv2h;
+      const zy = (z[c + n] - z[c - n]) * inv2h;
+      const zxx = (z[c + 1] + z[c - 1] - 2 * z[c]) * invH2;
+      const zyy = (z[c + n] + z[c - n] - 2 * z[c]) * invH2;
+      const zxy = (z[c + n + 1] - z[c + n - 1] - z[c - n + 1] + z[c - n - 1]) * invH2 * 0.25;
+
+      const E = 1 + zx * zx;
+      const F = zx * zy;
+      const G = 1 + zy * zy;
+      const den = E * G - F * F;
+      const H = (E * zyy - 2 * F * zxy + G * zxx) / (2 * den);
+      const K = (zxx * zyy - zxy * zxy) / den;
+
+      power[c] = k2d * H;
+      astig[c] = k2d * 2 * Math.sqrt(Math.max(0, H * H - K));
+    }
+  }
+
+  return { n, semi, step, coord, params: p, z, power, astig, stats: palStats(n, coord, uRow, xcRow, power, astig, p) };
+}
+
+/** 三个互斥的评分口径：远用区干净度 / 近用区干净度 / 周边像散峰值。 */
+function palStats(n, coord, uRow, xcRow, power, astig, p) {
+  const semi = Math.abs(coord[0]);
+  const step = coord[1] - coord[0];
+  const R2 = semi * semi;
+  const CLEAN = 0.5; // D，"看得清"的像散门槛
+
+  let farClean = 0, farAll = 0;
+  let nearClean = 0, nearAll = 0;
+  let astigMax = 0;
+  let astigSum = 0, astigCnt = 0;
+  let usable = 0;
+  // 近用区可用面积 + 形状（宽/高）—— 面积大不等于形状对
+  let nearArea = 0;
+  let nx0 = Infinity, nx1 = -Infinity, ny0 = Infinity, ny1 = -Infinity;
+
+  // 近用区就是近用参考点周围那一片，不是"下半片全部"
+  const nearX = p.inset;
+  const nearY = Math.max(-semi + 4, -p.corridor - 6);
+  const nearR2 = 9 * 9;
+
+  for (let j = 0; j < n; j++) {
+    const y = coord[j];
+    for (let i = 0; i < n; i++) {
+      const c = j * n + i;
+      const a = astig[c];
+      if (!Number.isFinite(a)) continue;
+      const x = coord[i];
+      if (x * x + y * y > R2) { i = n; continue; }
+      astigSum += a; astigCnt++;
+      if (a > astigMax) astigMax = a;
+      if (a < CLEAN) usable++;
+
+      // 远用区：配镜十字上方
+      if (y >= 3) { farAll++; if (a < CLEAN) farClean++; }
+      // 近用区：近用参考点周围 9 mm
+      const dx = x - nearX, dy = y - nearY;
+      if (dx * dx + dy * dy <= nearR2) { nearAll++; if (a < CLEAN) nearClean++; }
+      // 近用区可用面积：加光已经升满、且干净
+      if (y <= -p.corridor && a < CLEAN) {
+        nearArea++;
+        if (x < nx0) nx0 = x;
+        if (x > nx1) nx1 = x;
+        if (y < ny0) ny0 = y;
+        if (y > ny1) ny1 = y;
+      }
+    }
+  }
+
+  // 通道在 0.5 D 等像散线处的半宽：取加光变化最快的那一行，从走廊中心往外量
+  let bestJ = -1, bestGrad = -1;
+  for (let j = 1; j < n - 1; j++) {
+    const g = Math.abs(uRow[j + 1] - uRow[j - 1]);
+    if (g > bestGrad && uRow[j] > 0.05 && uRow[j] < 0.95) { bestGrad = g; bestJ = j; }
+  }
+  let corridorHalf = 0;
+  if (bestJ > 0) {
+    const xc = xcRow[bestJ];
+    const rowBase = bestJ * n;
+    const ci = Math.round((xc + semi) / step);
+    corridorHalf = semi;
+    for (let d = 1; ci + d < n; d++) {
+      const a = astig[rowBase + ci + d];
+      if (Number.isFinite(a) && a >= CLEAN) { corridorHalf = d * step; break; }
+    }
+  }
+
+  // 走廊中心线上的残余像散（内偏越大越脏）
+  let corridorAstig = 0;
+  for (let j = 1; j < n - 1; j++) {
+    const y = coord[j];
+    if (y > -2 || y < -(p.corridor + 2)) continue;
+    const ci = Math.round((xcRow[j] + semi) / step);
+    const a = astig[j * n + ci];
+    if (Number.isFinite(a) && a > corridorAstig) corridorAstig = a;
+  }
+
+  const nearW = nearArea ? nx1 - nx0 : 0;
+  const nearH = nearArea ? ny1 - ny0 : 0;
+
+  return {
+    farPct: farAll ? farClean / farAll : 0,
+    nearPct: nearAll ? nearClean / nearAll : 0,
+    usablePct: astigCnt ? usable / astigCnt : 0,
+    nearArea: nearArea * step * step,
+    nearW,
+    nearH,
+    nearAspect: nearH > 0 ? nearW / nearH : 0,   // 宽 / 高
+    astigMax,
+    astigMean: astigCnt ? astigSum / astigCnt : 0,
+    corridorHalf,
+    corridorAstig,
+    clean: CLEAN,
+  };
+}
+
+
+// ── palview.mjs ──
+// 渐进片等高线图的绘制。lab 和游戏共用同一份，保证所见即所得。
+// 只碰 canvas 2D，不含任何物理。
+//
+// 配色只用冷色（深空蓝 → 青 → 冰），干净 = 近黑，脏 = 结霜。
+const PAL_TOP = 2.8;     // 色标上限，D
+
+const STOPS = [
+  [0.00, [5, 8, 12]],
+  [0.06, [8, 14, 20]],
+  [0.15, [12, 24, 33]],
+  [0.28, [17, 37, 51]],
+  [0.42, [23, 53, 71]],
+  [0.56, [32, 74, 96]],
+  [0.68, [44, 98, 122]],
+  [0.80, [62, 124, 148]],
+  [0.90, [88, 152, 176]],
+  [1.00, [124, 186, 208]],
+];
+
+/** v(D) → [r,g,b]。超过上限仍是最后一档。 */
+function rampRGB(v) {
+  const t = Math.max(0, v) / PAL_TOP;
+  if (t <= 0) return STOPS[0][1];
+  for (let k = 1; k < STOPS.length; k++) {
+    if (t <= STOPS[k][0]) {
+      const [a0, c0] = STOPS[k - 1], [a1, c1] = STOPS[k];
+      const u = (t - a0) / (a1 - a0);
+      return [
+        c0[0] + (c1[0] - c0[0]) * u,
+        c0[1] + (c1[1] - c0[1]) * u,
+        c0[2] + (c1[2] - c0[2]) * u,
+      ];
+    }
+  }
+  return STOPS[STOPS.length - 1][1];
+}
+
+// ── 离屏缓冲（按边长缓存，别每帧新建） ──
+let bufCv = null, bufCtx = null, bufImg = null, bufS = 0;
+function buf(S) {
+  if (bufS === S && bufCv) return { cv: bufCv, ctx: bufCtx, img: bufImg };
+  bufS = S;
+  bufCv = document.createElement("canvas");
+  bufCv.width = S; bufCv.height = S;
+  bufCtx = bufCv.getContext("2d");
+  bufImg = bufCtx.createImageData(S, S);
+  return { cv: bufCv, ctx: bufCtx, img: bufImg };
+}
+
+/** 双线性采样一张网格（astig 或 power）。网格外返回 NaN。 */
+function sampleGrid(map, grid, x, y) {
+  const { n, step, semi } = map;
+  const fx = (x + semi) / step, fy = (y + semi) / step;
+  const i0 = Math.floor(fx), j0 = Math.floor(fy);
+  if (i0 < 0 || j0 < 0 || i0 >= n - 1 || j0 >= n - 1) return NaN;
+  const tx = fx - i0, ty = fy - j0;
+  const a = grid[j0 * n + i0], b = grid[j0 * n + i0 + 1];
+  const c = grid[(j0 + 1) * n + i0], d = grid[(j0 + 1) * n + i0 + 1];
+  if (!(Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d))) return NaN;
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
+const CASES = [
+  [], [[3, 0]], [[0, 1]], [[3, 1]], [[1, 2]], [[3, 2], [0, 1]], [[0, 2]], [[3, 2]],
+  [[2, 3]], [[2, 0]], [[0, 3], [1, 2]], [[2, 1]], [[1, 3]], [[1, 0]], [[0, 3]], [],
+];
+
+/**
+ * 画一整张镜片像散图。
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{x:number,y:number,w:number,h:number}} rect  设备像素
+ * @param {object} map  palMap() 的返回值
+ * @param {object} [opts] {dpr, frameR, labels, hover, levels}
+ */
+function drawPalMap(ctx, rect, map, opts = {}) {
+  const dpr = opts.dpr || 1;
+  const S = Math.round(Math.min(rect.w, rect.h));
+  if (S < 40) return;
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  const R = S / 2;
+  const semi = map.semi;
+
+  // ── 1. 填充 ──
+  const { cv, ctx: bx, img } = buf(S);
+  const data = img.data;
+  const half = S / 2;
+  for (let py = 0; py < S; py++) {
+    const y = ((S - py - 0.5) / S) * 2 * semi - semi;   // 屏幕向下 = y 减小
+    for (let px = 0; px < S; px++) {
+      const o = (py * S + px) * 4;
+      const x = ((px + 0.5) / S) * 2 * semi - semi;
+      if (x * x + y * y > semi * semi) { data[o + 3] = 0; continue; }
+      const a = sampleGrid(map, map.astig, x, y);
+      if (!Number.isFinite(a)) { data[o + 3] = 0; continue; }
+      const c = rampRGB(a);
+      data[o] = c[0]; data[o + 1] = c[1]; data[o + 2] = c[2]; data[o + 3] = 255;
+    }
+  }
+  bx.putImageData(img, 0, 0);
+
+  ctx.save();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(cv, cx - half, cy - half, S, S);
+
+  // 边缘压暗：注意力收到中间
+  const vg = ctx.createRadialGradient(cx, cy, R * 0.70, cx, cy, R);
+  vg.addColorStop(0, "rgba(5,8,11,0)");
+  vg.addColorStop(1, "rgba(5,8,11,0.62)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(cx - half, cy - half, S, S);
+
+  // ── 2. 等高线 ──
+  const px = (x) => cx + (x / (2 * semi)) * S;
+  const py = (y) => cy - (y / (2 * semi)) * S;
+  const levels = opts.levels || [
+    [0.25, "rgba(126,196,222,.12)", 0.8],
+    [0.50, "rgba(190,242,255,.62)", 1.5],
+    [0.90, "rgba(190,235,252,.20)", 0.9],
+    [1.30, "rgba(190,235,252,.16)", 0.9],
+    [1.80, "rgba(190,235,252,.14)", 0.9],
+    [2.30, "rgba(190,235,252,.12)", 0.9],
+  ];
+  contourLevels(ctx, map, levels, px, py, dpr);
+
+  // 验收线：把「像散不能超过多少」画成图上的一条等值线。
+  // 这样「红区有没有越过红线」是看得见的，不用回去读数字。
+  if (opts.annot && opts.annot.astigNeed != null) {
+    contourLevels(ctx, map,
+      [[opts.annot.astigNeed, "rgba(232,116,126,.92)", 1.7]],
+      px, py, dpr);
+  }
+  ctx.restore();  // 解除圆的裁剪
+
+  // ── 3. 两个圈：毛坯 Ø55、装框 Ø45 ──
+  ctx.beginPath(); ctx.arc(cx, cy, R - 0.5 * dpr, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(120,150,172,.5)"; ctx.lineWidth = 1.1 * dpr; ctx.stroke();
+
+  const frameR = map.semi * ((opts.frame || 45) / 55);
+  ctx.beginPath(); ctx.arc(cx, cy, (frameR / (2 * semi)) * S, 0, Math.PI * 2);
+  ctx.setLineDash([2 * dpr, 6 * dpr]);
+  ctx.strokeStyle = "rgba(140,175,200,.17)"; ctx.lineWidth = 1 * dpr; ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── 4. 标注：把验收结论画在它所描述的位置上 ──
+  if (opts.annot) drawAnnotations(ctx, { cx, cy, R, S, semi, px, py, dpr, map, an: opts.annot, focus: opts.focus });
+
+  // ── 5. 标记 ──
+  const p = map.params;
+  // 配镜十字
+  const kx = px(0), ky = py(0), arm = 6 * dpr;
+  ctx.strokeStyle = "rgba(127,212,240,.9)"; ctx.lineWidth = 1.1 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(kx - arm, ky); ctx.lineTo(kx + arm, ky);
+  ctx.moveTo(kx, ky - arm); ctx.lineTo(kx, ky + arm);
+  ctx.stroke();
+
+  // 近用参考圈
+  const ny = Math.max(-semi + 4, -p.corridor - 6);
+  ctx.beginPath();
+  ctx.arc(px(p.inset), py(ny), (9 / (2 * semi)) * S, 0, Math.PI * 2);
+  ctx.setLineDash([3 * dpr, 3 * dpr]);
+  ctx.strokeStyle = "rgba(127,212,240,.32)"; ctx.lineWidth = 1 * dpr; ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 剖面位置
+  if (opts.profileY !== undefined && opts.profileY !== null) {
+    const yy = py(opts.profileY);
+    ctx.beginPath();
+    ctx.moveTo(px(-semi * 0.78), yy); ctx.lineTo(px(semi * 0.78), yy);
+    ctx.strokeStyle = "rgba(127,212,240,.30)"; ctx.lineWidth = 1 * dpr;
+    ctx.setLineDash([1 * dpr, 4 * dpr]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // 区名
+  if (opts.labels !== false) {
+    ctx.font = Math.round(9.5 * dpr) + "px ui-monospace,Consolas,monospace";
+    ctx.fillStyle = "rgba(140,172,195,.34)";
+    ctx.textAlign = "center";
+    ctx.fillText("远 用 区", px(0), py(semi * 0.68));
+    ctx.fillText("近 用 区", px(p.inset), py(-semi * 0.90));
+  }
+
+  // 角标
+  ctx.font = Math.round(9.5 * dpr) + "px ui-monospace,Consolas,monospace";
+  ctx.fillStyle = "rgba(150,175,195,.5)";
+  ctx.textAlign = "left";
+  ctx.fillText("Ø 55", cx - R + 8 * dpr, cy + R - 8 * dpr);
+  ctx.textAlign = "right";
+  ctx.fillText("n 1.60", cx + R - 8 * dpr, cy + R - 8 * dpr);
+
+  // 悬停十字 + 读数
+  if (opts.hover) {
+    const h = opts.hover;
+    ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(cx - R, py(h.y)); ctx.lineTo(cx + R, py(h.y));
+    ctx.moveTo(px(h.x), cy - R); ctx.lineTo(px(h.x), cy + R);
+    ctx.stroke();
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(205,238,252,.9)";
+    ctx.fillText(
+      "x " + h.x.toFixed(1) + "  y " + h.y.toFixed(1) +
+      "   P " + h.power.toFixed(2) + "   A " + h.astig.toFixed(2),
+      cx - R + 8 * dpr, cy - R + 15 * dpr);
+  }
+  ctx.restore();
+}
+
+/** 行进方块画一组等值线。 */
+function contourLevels(ctx, map, levels, px, py, dpr) {
+  const { n, astig } = map;
+  for (const [level, color, width] of levels) {
+    ctx.beginPath();
+    for (let j = 0; j < n - 1; j++) {
+      const y0 = map.coord[j], y1 = map.coord[j + 1];
+      for (let i = 0; i < n - 1; i++) {
+        const a = astig[j * n + i], b = astig[j * n + i + 1];
+        const c = astig[(j + 1) * n + i + 1], d = astig[(j + 1) * n + i];
+        if (!(Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d))) continue;
+        let idx = 0;
+        if (a >= level) idx |= 1;
+        if (b >= level) idx |= 2;
+        if (c >= level) idx |= 4;
+        if (d >= level) idx |= 8;
+        const segs = CASES[idx];
+        if (!segs.length) continue;
+        const x0 = map.coord[i], x1 = map.coord[i + 1];
+        const t = (u, v) => (level - u) / (v - u);
+        const P = [
+          [px(x0 + (x1 - x0) * t(a, b)), py(y0)],
+          [px(x1), py(y0 + (y1 - y0) * t(b, c))],
+          [px(x0 + (x1 - x0) * t(d, c)), py(y1)],
+          [px(x0), py(y0 + (y1 - y0) * t(a, d))],
+        ];
+        for (const s of segs) {
+          ctx.moveTo(P[s[0]][0], P[s[0]][1]);
+          ctx.lineTo(P[s[1]][0], P[s[1]][1]);
+        }
+      }
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width * dpr;
+    ctx.stroke();
+  }
+}
+
+/**
+ * 把三条验收画到图上：通道多长、内偏多少、近用区多大、像散峰值在哪。
+ * 过线是冰蓝，不过线是红 —— 结论长在它描述的那个位置上，而不是角落里的一行字。
+ *
+ * an = { corridor, inset, halfWidth, nearArea, nearNeed, astigMax, astigNeed, insetRange }
+ */
+function drawAnnotations(ctx, k) {
+  const { px, py, dpr, map, an, focus, R } = k;
+  const OK = "rgba(140,220,240,.92)";
+  const BAD = "rgba(226,110,120,.95)";
+  const DIM = "rgba(140,180,205,.36)";
+  const hi = (key) => focus === key;
+  const lw = (w) => w * dpr;
+  const font = (s) => Math.round(s * dpr) + "px ui-monospace,Consolas,monospace";
+
+  const nearOk = (an.nearNeed == null || an.nearArea >= an.nearNeed) &&
+    (an.nearMax == null || an.nearArea <= an.nearMax);
+  const aspectOk = an.nearAspect == null ? true :
+    (an.aspectMin == null || an.nearAspect >= an.aspectMin - 1e-9) &&
+    (an.aspectMax == null || an.nearAspect <= an.aspectMax + 1e-9);
+  const astigOk = an.astigNeed == null ? true : an.astigMax <= an.astigNeed;
+
+  // 标注要压在发亮的色块上，必须带底，否则一个字都读不出来
+  const label = (text, x, y, color, align = "center") => {
+    ctx.font = font(9.5);
+    const w = ctx.measureText(text).width;
+    const padX = 4 * dpr, h = 13 * dpr;
+    let bx = x - w / 2;
+    if (align === "left") bx = x;
+    if (align === "right") bx = x - w;
+    ctx.fillStyle = "rgba(6,10,15,.82)";
+    roundRectPath(ctx, bx - padX, y - h + 4 * dpr, w + padX * 2, h, 2 * dpr);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.fillText(text, bx, y);
+  };
+
+  ctx.save();
+  ctx.lineCap = "round";
+
+  // ── 通道：从配镜十字到近用参考点的一条竖线 ──
+  {
+    const x = px(0);
+    const y0 = py(0), y1 = py(-an.corridor);
+    const col = hi("corridor") ? OK : "rgba(150,190,215,.55)";
+    ctx.beginPath();
+    ctx.moveTo(x + 4 * dpr, y0); ctx.lineTo(x + 4 * dpr, y1);
+    ctx.moveTo(x + 1 * dpr, y0); ctx.lineTo(x + 7 * dpr, y0);
+    ctx.moveTo(x + 1 * dpr, y1); ctx.lineTo(x + 7 * dpr, y1);
+    ctx.strokeStyle = hi("corridor") ? OK : DIM;
+    ctx.lineWidth = lw(hi("corridor") ? 1.8 : 1);
+    ctx.stroke();
+    label("通道 " + an.corridor.toFixed(0), x + 10 * dpr, (y0 + y1) / 2 + 6 * dpr, col, "left");
+  }
+
+  // ── 内偏：一把带允许区间的标尺，越界就变红 ──
+  {
+    const [lo, hiI] = an.insetRange || [0, 3.5];
+    const okIn = an.inset >= lo - 1e-6 && an.inset <= hiI + 1e-6;
+    const col = okIn ? (hi("inset") ? OK : "rgba(150,190,215,.6)") : BAD;
+    const y = py(0) - 14 * dpr;
+    const x0 = px(0), x1 = px(hiI + 0.8);
+    // 允许区间涂一层底
+    ctx.fillStyle = okIn ? "rgba(140,220,240,.13)" : "rgba(232,116,126,.16)";
+    ctx.fillRect(px(lo), y - 4.5 * dpr, px(hiI) - px(lo), 9 * dpr);
+    // 轴 + 两端刻
+    ctx.strokeStyle = "rgba(150,190,215,.5)"; ctx.lineWidth = lw(1);
+    ctx.beginPath();
+    ctx.moveTo(x0, y); ctx.lineTo(x1, y);
+    ctx.moveTo(x0, y - 3 * dpr); ctx.lineTo(x0, y + 3 * dpr);
+    ctx.moveTo(px(lo), y - 4 * dpr); ctx.lineTo(px(lo), y + 4 * dpr);
+    ctx.moveTo(px(hiI), y - 4 * dpr); ctx.lineTo(px(hiI), y + 4 * dpr);
+    ctx.stroke();
+    // 当前值
+    const xm = px(an.inset);
+    ctx.strokeStyle = col; ctx.lineWidth = lw(hi("inset") ? 2 : 1.6);
+    ctx.beginPath();
+    ctx.moveTo(xm, y - 6.5 * dpr); ctx.lineTo(xm, y + 6.5 * dpr);
+    ctx.stroke();
+    label(okIn
+      ? "内偏 " + an.inset.toFixed(1)
+      : "内偏 " + an.inset.toFixed(1) + " ✗ 要 " + lo.toFixed(1) + "–" + hiI.toFixed(1),
+      x0, y - 8 * dpr, col, "left");
+  }
+
+  // ── 近用区：把「干净的那一片」框出来，并写下面积 ──
+  {
+    const b = nearBox(map);
+    if (b) {
+      const x0 = px(b.x0), x1 = px(b.x1), y0 = py(b.y1), y1 = py(b.y0);
+      const col = nearOk ? OK : BAD;
+      ctx.strokeStyle = hi("halfWidth") ? col : (nearOk ? "rgba(140,220,240,.7)" : BAD);
+      ctx.lineWidth = lw(hi("halfWidth") ? 1.9 : 1.3);
+      ctx.setLineDash([5 * dpr, 4 * dpr]);
+      roundRectPath(ctx, x0, y0, x1 - x0, y1 - y0, 4 * dpr);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      label("近用 " + an.nearArea.toFixed(0) +
+        (an.nearNeed != null ? " / ≥" + an.nearNeed.toFixed(0) : "") +
+        (an.nearMax != null ? " / ≤" + an.nearMax.toFixed(0) : "") + " mm²",
+        x0 + 4 * dpr, (y0 + y1) / 2 + 4 * dpr, col, "left");
+
+      // 形状单独一行 —— 面积够了不等于形状对
+      if (an.aspectMin != null || an.aspectMax != null) {
+        const need = an.aspectMin != null ? "≥" + an.aspectMin.toFixed(2) : "≤" + an.aspectMax.toFixed(2);
+        label("形状 " + an.nearAspect.toFixed(2) + " : 1 / " + need,
+          x0 + 4 * dpr, (y0 + y1) / 2 + 20 * dpr, aspectOk ? OK : BAD, "left");
+        // 参考方：同样面积的正方形，让「方 / 扁」有对照
+        const side = Math.sqrt((x1 - x0) * (y1 - y0));
+        const cxb = (x0 + x1) / 2, cyb = (y0 + y1) / 2;
+        ctx.strokeStyle = "rgba(150,190,215,.30)"; ctx.lineWidth = lw(1);
+        ctx.setLineDash([2 * dpr, 4 * dpr]);
+        ctx.strokeRect(cxb - side / 2, cyb - side / 2, side, side);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // ── 像散峰值：一个准星，标在全片最脏的地方 ──
+  {
+    const p = astigPeak(map);
+    if (p) {
+      const x = px(p.x), y = py(p.y), s = 5 * dpr;
+      const col = astigOk ? OK : BAD;
+      ctx.strokeStyle = col; ctx.lineWidth = lw(1.4);
+      ctx.beginPath();
+      ctx.arc(x, y, s, 0, Math.PI * 2);
+      ctx.moveTo(x - s * 2.1, y); ctx.lineTo(x - s * 0.7, y);
+      ctx.moveTo(x + s * 0.7, y); ctx.lineTo(x + s * 2.1, y);
+      ctx.moveTo(x, y - s * 2.1); ctx.lineTo(x, y - s * 0.7);
+      ctx.moveTo(x, y + s * 0.7); ctx.lineTo(x, y + s * 2.1);
+      ctx.stroke();
+      label("峰值 " + an.astigMax.toFixed(2) +
+        (an.astigNeed != null ? " / ≤" + an.astigNeed.toFixed(2) : "") + " D",
+        x, y - s * 2.6, col, p.x > 0 ? "right" : "left");
+    }
+  }
+
+  // ── 图例：没有它，色块就只是色块 ──
+  {
+    const barW = 112 * dpr, barH = 5 * dpr;
+    const bx = k.cx - R + 16 * dpr;
+    const by = k.cy + R - 50 * dpr;
+    const g = ctx.createLinearGradient(bx, 0, bx + barW, 0);
+    for (let i = 0; i <= 8; i++) {
+      const c = rampRGB((i / 8) * PAL_TOP);
+      g.addColorStop(i / 8, "rgb(" + c.map(Math.round).join(",") + ")");
+    }
+    ctx.fillStyle = "rgba(6,10,15,.85)";
+    ctx.fillRect(bx - 5 * dpr, by - 17 * dpr, barW + 10 * dpr, barH + 34 * dpr);
+
+    ctx.fillStyle = g;
+    ctx.fillRect(bx, by, barW, barH);
+    ctx.strokeStyle = "rgba(120,160,185,.45)"; ctx.lineWidth = lw(0.8);
+    ctx.strokeRect(bx, by, barW, barH);
+
+    ctx.font = font(8);
+    // 标题行
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(175,205,225,.9)";
+    ctx.fillText("像散 D", bx, by - 5 * dpr);
+    // 验收线
+    if (an.astigNeed != null) {
+      const inScale = an.astigNeed <= PAL_TOP;
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(238,150,158,.95)";
+      ctx.fillText("验收 " + an.astigNeed.toFixed(2) + (inScale ? "" : " ↑"), bx + barW, by - 5 * dpr);
+      if (inScale) {
+        const tx = bx + (an.astigNeed / PAL_TOP) * barW;
+        ctx.strokeStyle = "rgba(232,116,126,.95)"; ctx.lineWidth = lw(1.3);
+        ctx.beginPath(); ctx.moveTo(tx, by - 2 * dpr); ctx.lineTo(tx, by + barH + 2 * dpr); ctx.stroke();
+      }
+    }
+    // 刻度行
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(150,185,210,.7)";
+    ctx.fillText("0", bx, by + 13 * dpr);
+    ctx.textAlign = "right";
+    ctx.fillText("≥" + PAL_TOP.toFixed(1) + " 饱和", bx + barW, by + 13 * dpr);
+  }
+
+  ctx.restore();
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/** 近用区（加光升满、像散 < 0.5）的包围盒。 */
+function nearBox(map) {
+  const { n, coord, astig } = map;
+  const c = map.params.corridor;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, cnt = 0;
+  for (let j = 0; j < n; j++) {
+    const y = coord[j];
+    if (y > -c) continue;
+    for (let i = 0; i < n; i++) {
+      const a = astig[j * n + i];
+      if (!(a < 0.5)) continue;
+      const x = coord[i];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      cnt++;
+    }
+  }
+  return cnt ? { x0, x1, y0, y1 } : null;
+}
+
+/** 全片像散最大的那个点。 */
+function astigPeak(map) {
+  const { n, coord, astig } = map;
+  let best = -1, bx = 0, by = 0;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const a = astig[j * n + i];
+      if (a > best) { best = a; bx = coord[i]; by = coord[j]; }
+    }
+  }
+  return best > 0 ? { x: bx, y: by, v: best } : null;
+}
+
+/** 横截面曲线：在给定 y 处沿 x 的像散。放大了看 Minkwitz 那条直线。 */
+function drawPalProfile(ctx, rect, map, opts = {}) {
+  const dpr = opts.dpr || 1;
+  const y0 = opts.y ?? -9;
+  const { w, h } = rect;
+  const semi = map.semi;
+  const padL = 26 * dpr, padR = 8 * dpr, padT = 6 * dpr, padB = 13 * dpr;
+  const iw = w - padL - padR, ih = h - padT - padB;
+  if (iw < 20 || ih < 10) return;
+
+  const j = Math.max(0, Math.min(map.n - 1, Math.round((y0 + semi) / map.step)));
+  const row = map.astig;
+  const base = j * map.n;
+  const top = opts.top || 3.0;
+
+  const X = (x) => rect.x + padL + ((x + semi) / (2 * semi)) * iw;
+  const Y = (a) => rect.y + padT + ih - Math.min(1, a / top) * ih;
+
+  ctx.save();
+  // 边框
+  ctx.strokeStyle = "rgba(40,55,70,.9)"; ctx.lineWidth = 1 * dpr;
+  ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, w - 1, h - 1);
+
+  // 0.5 D 门槛线
+  ctx.beginPath();
+  ctx.moveTo(rect.x + padL, Y(0.5)); ctx.lineTo(rect.x + w - padR, Y(0.5));
+  ctx.setLineDash([3 * dpr, 4 * dpr]);
+  ctx.strokeStyle = "rgba(127,212,240,.35)"; ctx.lineWidth = 1 * dpr; ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 曲线 + 填充
+  ctx.beginPath();
+  let started = false;
+  const pts = [];
+  for (let i = 0; i < map.n; i++) {
+    const a = row[base + i];
+    if (!Number.isFinite(a)) { started = false; continue; }
+    const x = X(map.coord[i]), y = Y(a);
+    pts.push([x, y]);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = "rgba(160,226,250,.95)"; ctx.lineWidth = 1.3 * dpr; ctx.stroke();
+
+  if (pts.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], Y(0));
+    for (const q of pts) ctx.lineTo(q[0], q[1]);
+    ctx.lineTo(pts[pts.length - 1][0], Y(0));
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, rect.y + padT, 0, rect.y + padT + ih);
+    g.addColorStop(0, "rgba(120,200,230,.18)");
+    g.addColorStop(1, "rgba(120,200,230,.02)");
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  // 刻度
+  ctx.font = Math.round(8.5 * dpr) + "px ui-monospace,Consolas,monospace";
+  ctx.fillStyle = "rgba(120,145,165,.65)";
+  ctx.textAlign = "left";
+  ctx.fillText(top.toFixed(1), rect.x + 4 * dpr, Y(top) + 8 * dpr);
+  ctx.fillText("0", rect.x + 4 * dpr, Y(0) - 2 * dpr);
+  ctx.textAlign = "right";
+  ctx.fillText("y = " + y0.toFixed(0) + " mm 横向剖面", rect.x + w - padR, rect.y + 9 * dpr);
+  ctx.restore();
+}
+
+
+// ── game.mjs ──
+// 游戏状态机：接单 → 选料 → 调参数 → 加工 → 结算 → 下一单。纯逻辑，不碰 DOM。
+//
+// 设计原则：
+//   1. 没有隐藏的随机成功。唯一的不确定性是「毛坯厚度公差」—— 而且公差是写在界面上的，
+//      玩家看得见概率，事后也看得见实测值。这是赌，不是老虎机。
+//   2. 两个独立的失败面：光学（度数对不对）、机械（装不装得进框）。
+//   3. 失败必须可解释。
+//
+// 关键课堂点：
+//   前表面越弯，白送的会聚越多，后表面就得退更多 —— 薄透镜方程。
+//   材料一变，几何不变而度数就变 —— 换料必须重算基弧。
+//   便宜料公差大 —— 同样的设计，可能装不进框。
+
+
+const M = Object.fromEntries(MATERIALS.map((m) => [m.id, m]));
+
+/** 毛坯厚度公差（mm）。便宜料压得松，公差大 —— 这是「便宜」的真实代价。 */
+const MATERIAL_TOL = { cr39: 0.15, mr8: 0.07, mr7: 0.04 };
+
+/**
+ * 订单池。第 0 单是教学单（固定），其余进「订单板」三选一。
+ * fixedR2 由店里给定（标准设计），玩家负责磨前表面。
+ */
+const ORDERS = [
+  {
+    id: "o1", sph: -2.0, fixedR2: -62.0, t: 2.0, materials: ["cr39"], price: 300,
+    who: "顾客 A", diff: 1,
+    line: "我看远处有点糊，−2.00 的，麻烦你配一副。", budget: "fair",
+    brief: "后表面已经定好，你只管磨前表面。",
+    lesson: {
+      title: "前表面越弯，白送得越多",
+      body: "同一片镜片，前表面越弯，它自己白送的会聚就越多 —— 后表面就得「退」回更多，才能把总度数拉回处方。你调的是一个平衡，不是越大越好。",
+    },
+  },
+  {
+    id: "o2", sph: -3.5, fixedR2: -55.0, t: 2.0, materials: ["cr39", "mr8"], price: 460,
+    who: "顾客 B", diff: 1,
+    line: "三百多度，不深。预算就这么点，别报高价。", budget: "tight",
+    brief: "可以换材料了。换材料度数会跑，记得重新找 R₁。",
+    lesson: {
+      title: "不是越贵越好",
+      body: "−3.50 用 CR-39 绰绰有余，边缘才 5mm 出头。换 1.60 只是薄一点，材料费却翻了三倍。高价材料是给高度数准备的。",
+    },
+  },
+  {
+    id: "o3", sph: -5.0, fixedR2: -48.0, t: 2.0, materials: ["cr39", "mr8"], price: 640,
+    who: "顾客 C", diff: 2,
+    line: "五百度，老度数了。预算不多，报个实在价。", budget: "tight",
+    brief: "CR-39 的公差是 ±0.15，1.60 是 ±0.07。",
+    lesson: {
+      title: "便宜的料，公差大",
+      body: "CR-39 的毛坯厚度公差是 ±0.15mm，1.60 是 ±0.07mm。度数不高时这点差别无所谓，但边缘一旦卡在 8mm 线上，±0.15 就能决定装不装得进去。",
+    },
+  },
+  {
+    id: "o4", sph: -6.5, fixedR2: -44.0, t: 1.8, materials: ["cr39", "mr8"], price: 800,
+    who: "顾客 D", diff: 2,
+    line: "六百五十度。别太厚啊，我脸小。", budget: "fair",
+    brief: "边缘快贴到 8mm 线了，注意公差带。",
+    lesson: {
+      title: "公差带就是风险区",
+      body: "边缘厚度条上的浅色带，就是这块毛坯可能落到的地方。带子碰到 8mm 线，就说明这一单有可能做废 —— 不是运气，是你选的料。",
+    },
+  },
+  {
+    id: "o5", sph: -8.0, fixedR2: -40.0, t: 1.5, materials: ["cr39", "mr8", "mr7"], price: 1080,
+    who: "顾客 E", diff: 3,
+    line: "八百度。别给我配那种厚得像瓶底的。", budget: "fair",
+    brief: "高度数。CR-39 做不了这个度数。",
+    lesson: {
+      title: "镜片有物理极限",
+      body: "−8.00 用 CR-39 边缘 9.04mm，而且这块料本身压不出这么深的弧。1.60 磨到 7.94，公差带正压在 8mm 线上；1.67 是 7.39，才算真塞得进去。",
+    },
+  },
+  {
+    id: "o6", sph: -9.0, fixedR2: -48.0, t: 1.3, materials: ["mr8", "mr7"], price: 1240,
+    who: "顾客 F", diff: 3,
+    line: "九百度，我认了。钱不是问题，配好就行。", budget: "loose",
+    brief: "只有 1.60 和 1.67 能做。",
+    lesson: {
+      title: "极限度数只剩一种选择",
+      body: "−9.00 用 1.60，前表面要磨到 171mm，边缘 7.74，公差带顶到 7.81 —— 刚好塞得下 8mm 的框。1.67 只要 136mm，边缘 7.15，松一点，但材料贵一倍。",
+    },
+  },
+  {
+    id: "o7", sph: 2.5, fixedR2: -242.0, t: 3.2, materials: ["cr39", "mr8"], price: 520,
+    who: "顾客 G", diff: 2,
+    line: "远视，+2.50。听说远视镜中间厚？", budget: "fair",
+    brief: "正度数。正负号变了，光路方向也变了。",
+    lesson: {
+      title: "正负镜片的厚度反过来",
+      body: "近视镜中间薄、边缘厚；远视镜中间厚、边缘薄。所以远视镜的麻烦不是「边缘装不进框」，而是「边缘太薄会崩」。",
+    },
+  },
+  {
+    id: "o8", sph: 4.0, fixedR2: -258.0, t: 4.2, materials: ["cr39", "mr8"], price: 760,
+    who: "顾客 H", diff: 3,
+    line: "四百度远视，这么多年一直戴着。", budget: "fair",
+    brief: "正度数越高，边缘越薄。",
+    lesson: {
+      title: "边缘太薄也是废品",
+      body: "正度数做过头，最薄的地方会低于 1mm，一装框就崩。所以正镜片要往「厚」这边留余量，和负镜片正好相反。",
+    },
+  },
+  {
+    id: "o9", sph: -7.0, fixedR2: -42.0, t: 1.6, materials: ["mr8", "mr7"], price: 960,
+    who: "顾客 I", diff: 2,
+    line: "七百度，要轻的。钱我不在乎，别糊弄我。", budget: "loose",
+    brief: "1.67 的公差只有 ±0.04。",
+    lesson: {
+      title: "花更多钱买的是确定性",
+      body: "换料本身不改边缘 —— 边缘只由 R₁、R₂、厚度决定。但高折射率要凑同一个度数，前表面得磨得更弯（1.67 要 R₁=76，1.60 要 83）。前表面弯得多，边就被带走得多，边缘才薄下来。",
+    },
+  },
+  {
+    id: "o10", sph: -10.0, fixedR2: -47.0, t: 1.2, materials: ["mr8", "mr7"], price: 1720,
+    who: "顾客 J", diff: 3,
+    line: "一千度。配得好，钱好说。", budget: "loose",
+    brief: "只有 1.67 能做，而且快到极限了。",
+    lesson: {
+      title: "到这儿就到底了",
+      body: "−10.00 这条线上，1.60 就算把前表面磨到 216mm，边缘还是 8.33，装不进去；只有 1.67 能压到 7.68。常规材料到这儿基本见底了，再往上得换非球面设计。",
+    },
+  },
+];
+
+/**
+ * 一天 5 单，节奏是 快—快—慢—快—慢：
+ *   第 1 单（第 1 天是教学单） → 第 2 单 例行 → 第 3 单 定制 → 第 4 单 例行 → 第 5 单 定制
+ * 例行单压成肌肉记忆，两单定制决定这一天的成败。
+ */
+const DAY_ROUNDS = 5;
+
+/** 留给定制单的轮次（0 基）：第 3 单和第 5 单。 */
+const CUSTOM_ROUNDS = [2, 4];
+
+// ─────────────────────────────────────────────
+// 渐进多焦点定制单
+// ─────────────────────────────────────────────
+//
+// 面形内核在 optics/pal.mjs。这里只负责「顾客要什么」和「交付判定」。
+//
+// 判定用三条互斥的指标：
+//   近用区面积  ← 通道越长，近用区越被挤到镜片边上，面积越小
+//   周边像散    ← 通道越短，加光爬得越陡，两侧像散越大（Minkwitz）
+//   内偏区间    ← 装配工艺要求，不是越大越好
+//
+// 于是可行域是一条斜带：通道短就得把近用区收窄，通道长才能放宽。
+// 玩家得找那条带子，而不是把所有滑块拉到底。
+
+/** 渐进片订单的默认工艺条件（照着装配单来的）。 */
+const PAL_INSET_RANGE = [2.0, 3.0];
+
+/** 开局给一个粗糙设计 —— 一上手必须是不合格的那种。 */
+const PAL_ROUGH = Object.freeze({
+  corridor: 12, inset: 3.5, halfWidth: 5.0, hardness: 2.0,
+});
+const PAL_ORDERS = [
+  {
+    id: "p1", kind: "pal", add: 2.0, sph: 0, fixedR2: null, t: 2.0,
+    materials: ["mr7"], price: 1800, who: "顾客 K", diff: 3, budget: "fair",
+    line: "看手机得把屏举远才行。医生说我该配渐进片了，能看远也能看近的那种。",
+    brief: "ADD 2.00。近用区要够大，两侧还要干净 —— 两头顶着。",
+    need: { nearArea: 55, astig: 3.4, insetRange: [2.0, 3.0] },
+    lesson: {
+      title: "渐进片没有「都对」这一档",
+      body: "同一片镜片上，远用区要平、近用区要加光，中间那段通道就是加光爬升的地方。爬得越陡，两侧的像散越大 —— 这是几何逼出来的，叫 Minkwitz 定理。所以你能做的只有选一个取舍点，做不到全都要。",
+    },
+  },
+  {
+    id: "p2", kind: "pal", add: 2.25, sph: 0, fixedR2: null, t: 2.0,
+    materials: ["mr7"], price: 2300, who: "顾客 L", diff: 3, budget: "loose",
+    line: "我一天到晚看电脑，低头就是键盘。近用区别给我做大了，我要一条又长又宽的通道，一低头就要能看清。",
+    brief: "ADD 2.25。这一单要的是【形状】：近用区要横着铺开，不是一个竖窄条。",
+    need: { nearAreaMax: 60, aspectMin: 1.15, insetRange: [2.0, 3.0] },
+    lesson: {
+      title: "面积够，形状不一定对",
+      body: "上一单你要把近用区做大，这一单顾客要的是「横着铺开」。同样 45 mm²，可以是一条竖着的窄条，也可以是一片横着的宽面 —— 前者看近要低头找，后者一低头就在。面积达标不等于做对了，形状也得对。",
+    },
+  },
+  {
+    id: "p3", kind: "pal", add: 2.5, sph: 0, fixedR2: null, t: 2.0,
+    materials: ["mr7"], price: 3000, who: "顾客 M", diff: 3, budget: "loose",
+    line: "2.50 的加光。我这人脸窄、瞳距小，内偏跟着给我收一点；近用区要一整块方的，别给我那种扁扁的一条。",
+    brief: "ADD 2.50。要【又大又方】的近用区，内偏还有更窄的工艺区间。",
+    need: { nearArea: 90, aspectMax: 0.65, insetRange: [1.5, 2.5] },
+    lesson: {
+      title: "加光越高，能腾挪的地方越少",
+      body: "ADD 2.50 的时候两侧像散的下限本身就高（差不多等于加光）。想要一大块方的近用区，只能把通道压短 —— 而通道一短，加光就爬得陡。高端渐进片卖得贵，贵的就是这两毫米的腾挪空间。",
+    },
+  },
+];
+
+ORDERS.push(...PAL_ORDERS);
+
+/** 取订单（按 id 或下标）。 */
+function getOrder(idOrIndex) {
+  const src = typeof idOrIndex === "number"
+    ? ORDERS[idOrIndex]
+    : ORDERS.find((o) => o.id === idOrIndex);
+  if (!src) return null;
+  const list = src.materials.map((id) => M[id]);
+  const capable = list.filter((m) => src.sph >= m.maxMinus && src.sph <= m.maxPlus);
+  return {
+    ...src,
+    materialList: list,
+    material: capable[0] || list[0],
+    R1Range: [60, 260],
+  };
+}
+
+/** 当前设计选中的材料。 */
+function resolveMaterial(order, design) {
+  if (design && design.materialId && M[design.materialId]) return M[design.materialId];
+  return order.material;
+}
+
+/** 字符串 → [0,1) 的确定性散列，用来给每块毛坯一个固定的偏差。 */
+function hash01(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h / 4294967296;
+}
+
+/**
+ * 这块毛坯的实际厚度。
+ * 同一单 + 同一种料 → 永远是同一块（不能靠反复点材料重摇）。
+ * 换 runSeed（重开一天）才会变。
+ */
+function blankOf(order, mat, runSeed) {
+  const tol = MATERIAL_TOL[mat.id] ?? 0.1;
+  const u = hash01(`${runSeed}|${order.id}|${mat.id}`);
+  const off = (u * 2 - 1) * tol;
+  return { nominal: order.t, actual: order.t + off, off, tol };
+}
+
+/**
+ * 计算这块镜片的一切可判定量。
+ * 加工前用标称厚度（玩家不知道实际值）；加工时传 tActual 得到真实结果。
+ */
+function evaluate(order, design, tActual, frameMax = FRAME_MAX_EDGE) {
+  const mat = resolveMaterial(order, design);
+  const n = mat.n;
+  const tNom = order.t;
+  const t = tActual ?? tNom;
+  const R1 = design.R1;
+  const R2 = order.fixedR2;
+  const sph = order.sph;
+
+  const { Pv, P1, P2 } = vertexPower(R1, R2, t, n);
+  const dev = Pv - sph;
+  const edgeNom = edgeThickness(R1, R2, tNom, SEMI_DIA);
+  const edge = edgeThickness(R1, R2, t, SEMI_DIA);
+  const tol = MATERIAL_TOL[mat.id] ?? 0.1;
+
+  const reasons = [];
+  if (Math.abs(dev) > TOLERANCE_D) {
+    reasons.push({
+      code: "power",
+      text: `光焦度偏差 ${sign(dev)}D（允差 ±${TOLERANCE_D.toFixed(2)}D）`,
+      detail: "镜片磨出来的度数和处方对不上。",
+    });
+  }
+  if (!(edge <= frameMax)) {
+    reasons.push({
+      code: "edge_thick",
+      text: `边缘 ${f(edge)}mm，超过镜框能装的 ${frameMax.toFixed(1)}mm`,
+      detail: "装不进去，磨边时得削掉一圈。",
+    });
+  }
+  if (!(edge >= MIN_EDGE)) {
+    reasons.push({
+      code: "edge_thin",
+      text: `最薄处只有 ${f(edge)}mm，低于 ${MIN_EDGE}mm 下限`,
+      detail: "太薄，一装框就崩。",
+    });
+  }
+  if (sph < mat.maxMinus || sph > mat.maxPlus) {
+    reasons.push({
+      code: "material",
+      text: `${mat.name} 做不了 ${sign(sph).replace("+", "")}D`,
+      detail: "这块料压不出这么深的弧。",
+    });
+  }
+
+  return {
+    R1, R2, t, tNom, n, mat, Pv, P1, P2, dev,
+    edge, edgeNom, tol,
+    pass: reasons.length === 0, reasons,
+  };
+}
+
+/** 边缘厚度的公差带（加工前显示用）。 */
+function edgeBand(order, design) {
+  const mat = resolveMaterial(order, design);
+  const tol = MATERIAL_TOL[mat.id] ?? 0.1;
+  const r = evaluate(order, design, order.t);
+  return { min: r.edgeNom - tol, max: r.edgeNom + tol, nom: r.edgeNom, tol };
+}
+
+/** 结算：合格拿工钱减材料；不合格赔材料，但不赔成负数。 */
+function settle(order, result, state, price) {
+  const pay = price == null ? order.price : price;
+  const cost = (result.mat || order.material).cost;
+  if (result.pass) {
+    const gain = pay - cost;
+    return {
+      ok: true,
+      cash: state.cash + gain,
+      delta: gain,
+      lines: [`材料 ${cost} 元，工钱 ${pay} 元`, `净赚 ${gain} 元`],
+    };
+  }
+  const cash = Math.max(0, state.cash - cost);
+  return {
+    ok: false,
+    cash,
+    delta: cash - state.cash,
+    lines: [
+      `材料 ${cost} 元，报废`,
+      state.cash - cash === 0 ? "账上见底了，这单算白干" : `从账上扣了 ${state.cash - cash} 元`,
+    ],
+  };
+}
+
+const f = (v) => (Number.isFinite(v) ? v.toFixed(2) : "—");
+const sign = (v) => (v >= 0 ? "+" : "−") + f(Math.abs(v));
+
+
+// ─────────────────────────────────────────────
+// 报价：顾客心里有个价，你不知道，只能从话里猜
+// ─────────────────────────────────────────────
+
+/** 预算系数：紧 / 一般 / 大方。 */
+const BUDGET_FACTOR = { tight: 0.85, fair: 1.15, loose: 1.4 };
+
+/** 顾客的心理价位（取整到 10 元）。 */
+function reserveOf(order) {
+  const f = BUDGET_FACTOR[order.budget] ?? 1;
+  return Math.round((order.price * f) / 10) * 10;
+}
+
+/**
+ * 报价的结果。
+ *   报价 ≤ 心理价     → 成交
+ *   高出 35% 以内     → 顾客还价到心理价（按标价报也走这条路，不算冒犯）
+ *   高出 35% 以上     → 顾客走人
+ */
+function quoteOutcome(order, quote) {
+  const r = reserveOf(order);
+  const q = Math.max(0, Math.round(quote));
+  if (q <= r) return { kind: "deal", price: q, reserve: r };
+  if (q <= Math.round(r * 1.35)) return { kind: "counter", price: r, reserve: r };
+  return { kind: "lost", price: 0, reserve: r };
+}
+
+/**
+ * 从池子里按难度加权抽 n 张。
+ * 越往后，高难度权重越大 —— 这就是「难度递增」。
+ * mustKind 给定时，先按权重从这一类里抽一张占住位置（定制单轮次用）。
+ */
+function drawPicks(pool, round, n = 3, mustKind = null) {
+  const W = [
+    null,
+    { 1: 3, 2: 2, 3: 1 },
+    { 1: 1, 2: 3, 3: 2 },
+    { 1: 0, 2: 2, 3: 5 },
+  ];
+  const table = W[Math.min(Math.max(round, 1), 3)];
+  const bag = pool.slice();
+  const picks = [];
+
+  const takeOne = (ids) => {
+    const w = ids.map((id) => table[getOrder(id).diff] ?? 1);
+    const total = w.reduce((a, b) => a + b, 0);
+    let idx;
+    if (total <= 0) {
+      idx = Math.floor(Math.random() * ids.length); // 全被权重排除了，退回均权
+    } else {
+      let r = Math.random() * total;
+      idx = 0;
+      for (; idx < ids.length; idx++) {
+        r -= w[idx];
+        if (r <= 0) break;
+      }
+      idx = Math.min(idx, ids.length - 1);
+    }
+    const id = ids[idx];
+    bag.splice(bag.indexOf(id), 1);
+    picks.push(id);
+  };
+
+  if (mustKind) {
+    const cand = bag.filter((id) => getOrder(id).kind === mustKind);
+    if (cand.length) takeOne(cand);
+  }
+  while (picks.length < n && bag.length) takeOne(bag);
+
+  return picks;
+}
+
+// ─────────────────────────────────────────────
+// 经济：证书 / 头衔 / 房租 / 声誉
+// ─────────────────────────────────────────────
+
+/** 每日房租，日结扣除。 */
+const RENT = 200;
+const START_CASH = 300;
+const START_REP = 5;
+const REP_MAX = 10;
+
+/**
+ * 头衔阶梯。价格不写在这里 —— 商城（STORE_ITEMS）是唯一的价目表。
+ */
+const CERTS = [
+  { key: "apprentice", title: "学徒", note: "只能接普通球镜单" },
+  { key: "optometrist", title: "验光员", note: "解锁高度数单（|度数| ≥ 8.00）" },
+  { key: "senior", title: "高级技师", note: "商业资质，配合自由曲面工作台接渐进片" },
+];
+const SHOP_PRICE = 6000;
+const OWNER_TITLE = "店主";
+
+// ─────────────────────────────────────────────
+// 商城：资质 + 工作台物件 + 门店，全在这里明码标价
+// ─────────────────────────────────────────────
+const STORE_GROUPS = [
+  { key: "bench", name: "工 作 台", hint: "买了才有对应的读数和能力" },
+  { key: "cert", name: "资 质", hint: "考证才能接活" },
+  { key: "shop", name: "门 店", hint: "最后一步" },
+];
+
+/**
+ * kind: "tool" 一次性设备 / "cert" 提头衔 / "shop" 结局
+ * need: { cert: N } 或 { tool: "xxx" } 的前置
+ */
+const STORE_ITEMS = [
+  {
+    key: "thickness", kind: "tool", group: "bench", name: "测厚仪", price: 400, need: null,
+    note: "把边缘厚度的公差带显示出来。没有它，你只看得见标称值，看不出这一片会不会装不进框。",
+    gain: "边缘厚度公差带",
+  },
+  {
+    key: "grinder", kind: "tool", group: "bench", name: "电脑磨边机", price: 1200, need: null,
+    note: "装框上限从 8.0 mm 放宽到 8.6 mm。八百、一千度那种单，全指望它救。",
+    gain: "装框上限 8.6 mm",
+  },
+  {
+    key: "freeform", kind: "tool", group: "bench", name: "自由曲面工作台", price: 1800, need: { cert: 2 },
+    note: "渐进片的面形设计与像散检测。没有它，定制单连订单板都上不了。",
+    gain: "渐进片定制单",
+  },
+  {
+    key: "optometrist", kind: "cert", group: "cert", name: "验光员 证", price: 900, need: null, cert: 1,
+    note: "解锁高度数单（|度数| ≥ 8.00）。没这张证，订单板上永远不会出现八百度。",
+    gain: "高度数单",
+  },
+  {
+    key: "senior", kind: "cert", group: "cert", name: "高级技师 证", price: 2400, need: { cert: 1 }, cert: 2,
+    note: "商业资质。光有证做不了渐进片，还得有工作台 —— 这一行就是这样，两头都要钱。",
+    gain: "渐进片资质",
+  },
+  {
+    key: "owner", kind: "shop", group: "shop", name: "买下这家店", price: 6000, need: { cert: 2 },
+    note: "把老板请出去。招牌、机器、客源，全归你。",
+    gain: "结局",
+  },
+];
+
+/** 这件东西现在买不买得了。 */
+function canBuy(item, state) {
+  if (state.owned[item.key]) return { ok: false, why: "已拥有" };
+  if (item.need && item.need.cert != null && state.certIndex < item.need.cert) {
+    return { ok: false, why: "需" + CERTS[item.need.cert].title + "证" };
+  }
+  if (item.need && item.need.tool && !state.owned[item.need.tool]) {
+    return { ok: false, why: "需先买设备" };
+  }
+  if (state.cash < item.price) return { ok: false, why: "钱不够" };
+  return { ok: true, why: "" };
+}
+
+/** 这张单在当前证书 + 装备下能不能接。 */
+function isUnlocked(order, certIndex, owned = {}) {
+  if (order.kind === "pal") return certIndex >= 2 && !!owned.freeform;
+  if (Math.abs(order.sph) >= 8) return certIndex >= 1;
+  return true;
+}
+
+/** 接不了的话，卡在哪一句。能接返回 null。 */
+function lockReason(order, certIndex, owned = {}) {
+  if (order.kind === "pal") {
+    const noCert = certIndex < 2;
+    const noBench = !owned.freeform;
+    if (noCert && noBench) return "要「高级技师」证 + 自由曲面工作台";
+    if (noCert) return "要「高级技师」证";
+    if (noBench) return "要自由曲面工作台";
+  }
+  if (Math.abs(order.sph) >= 8 && certIndex < 1) return "要「验光员」证";
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// 渐进片：设计 → 判定
+// ─────────────────────────────────────────────
+
+/**
+ * 评估一片渐进片设计。
+ * @param {object} order  PAL_ORDERS 里的单
+ * @param {{corridor:number,inset:number,halfWidth:number,hardness:number}} design
+ */
+function evaluatePal(order, design) {
+  const params = {
+    add: order.add,
+    corridor: design.corridor,
+    inset: design.inset,
+    halfWidth: design.halfWidth,
+    hardness: design.hardness ?? 3,
+  };
+  const map = palMap(params);
+  const s = map.stats;
+  const need = order.need;
+  const [inLo, inHi] = need.insetRange || PAL_INSET_RANGE;
+  const insetOk = design.inset >= inLo - 1e-6 && design.inset <= inHi + 1e-6;
+
+  // 三张单考的不是同一条线的松紧，而是不同的约束种类：
+  //   p1 近用区要大（下限）；p2 近用区别太大（上限）；p3 内偏区间更窄 + 近用区撑满
+  const checks = [];
+
+  if (need.nearArea != null) {
+    checks.push({
+      key: "near", label: "近用区", need: need.nearArea, val: s.nearArea,
+      unit: "mm²", kind: "min", ok: s.nearArea >= need.nearArea,
+      why: "通道太长，近用区被挤到镜片下缘之外了",
+    });
+  }
+  if (need.nearAreaMax != null) {
+    checks.push({
+      key: "nearMax", label: "近用区上限", need: need.nearAreaMax, val: s.nearArea,
+      unit: "mm²", kind: "max", ok: s.nearArea <= need.nearAreaMax,
+      why: "近用区做太大，加光就在更短的距离里爬完，通道被压短了 —— 这位顾客要的是低头就能看见键盘",
+    });
+  }
+  if (need.astig != null) {
+    checks.push({
+      key: "astig", label: "周边像散", need: need.astig, val: s.astigMax,
+      unit: "D", kind: "max", ok: s.astigMax <= need.astig + 1e-9,
+      why: "通道太短，加光爬得太陡，两侧像散压不下来",
+    });
+  }
+  // 形状：宽 / 高。面积达标不等于做对了 —— 同样 45 mm²，可以是竖窄条也可以是横宽面
+  if (need.aspectMin != null) {
+    checks.push({
+      key: "aspectMin", label: "近用区形状", need: need.aspectMin, val: s.nearAspect,
+      unit: "", kind: "min", ok: s.nearAspect >= need.aspectMin - 1e-9, ratio: true,
+      why: "近用区不够宽 —— 这位顾客要一低头就能看见键盘，得横着铺开，不是一条竖窄条",
+    });
+  }
+  if (need.aspectMax != null) {
+    checks.push({
+      key: "aspectMax", label: "近用区形状", need: need.aspectMax, val: s.nearAspect,
+      unit: "", kind: "max", ok: s.nearAspect <= need.aspectMax + 1e-9, ratio: true,
+      why: "近用区太扁 —— 这位顾客要一整块方的，不是横着拉长的一条",
+    });
+  }
+  checks.push({
+    key: "inset", label: "内偏", need: null, val: design.inset,
+    unit: "mm", kind: "range", ok: insetOk, lo: inLo, hi: inHi,
+    why: "装配单要求内偏 " + inLo.toFixed(1) + "–" + inHi.toFixed(1) + " mm",
+  });
+
+  const reasons = checks.filter((c) => !c.ok).map((c) => ({
+    code: c.key,
+    text: c.ratio
+      ? c.label + " " + c.val.toFixed(2) + " : 1，" + (c.kind === "max" ? "超过 " : "不到 ") + c.need.toFixed(2) + " : 1"
+      : c.kind === "max"
+        ? c.label + " " + c.val.toFixed(c.unit === "D" ? 2 : 0) + " " + c.unit + "，超过验收线 " +
+          c.need.toFixed(c.unit === "D" ? 2 : 0)
+        : c.kind === "min"
+          ? c.label + " 只有 " + c.val.toFixed(0) + " " + c.unit + "，低于验收线 " + c.need.toFixed(0)
+          : c.label + " " + c.val.toFixed(1) + " mm 不在 " + c.lo.toFixed(1) + "–" + c.hi.toFixed(1) + " mm 之间",
+    detail: c.why + "。",
+  }));
+
+  return {
+    kind: "pal",
+    pass: reasons.length === 0,
+    checks, reasons, stats: s, map, params,
+    mat: M[order.materials[0]],
+  };
+}
+
+
+
+
+
+
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  cash: 300, round: 0, order: null, design: { R1: 150 },
+  ground: false, acuities: [], fails: 0, lastEs: null,
+  seed: Math.random().toString(36).slice(2),
+  pool: ORDERS.slice(1).map((o) => o.id),
+  blank: null,
+  agreedPrice: null,
+  intro: true,
+  revenue: 0,
+  spent: 0,
+  day: 1,
+  dayRevenue: 0,
+  daySpent: 0,
+  dayFails: 0,
+  dayAcuities: [],
+  certIndex: 0,
+  reputation: START_REP,
+  rentPaid: false,
+  owned: { thickness: false, grinder: false, freeform: false },
+  taken: [],
+  recent: [],
+  finished: 0,            // 今天已经处理完的单数（交货或走人都算）—— 收工只看这个
+  dayShop: 0,             // 今天在商城花了多少
+  runRevenue: 0,          // 整局累计收入
+  runShop: 0,             // 整局商城支出
+  runOrders: 0,           // 整局做过的单数
+  runFails: 0,
+  ended: false,
+  lessonsSeen: new Set(),
+  palFocus: null,
+  palPrev: null,
+  justBought: null,
+  storeIndex: 0,
+};
+
+/** 装了电脑磨边机，装框上限才放宽。 */
+const frameMax = () => (state.owned.grinder ? 8.6 : 8.0);
+
+// ── 画布 ──
+const cv = $("optics");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = Math.min(devicePixelRatio || 1, 2);
+
+function resize() {
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  draw();
+}
+
+// ── 场景几何（mm）：镜片前顶点 x=0，角膜在 t+vertex，视网膜在角膜后 RETINA_MM ──
+const SCENE = { ap: 5.0 };   // 画镜片时只取中心 ±5mm 的口径（真正进瞳孔的那一小束）
+
+/** 一段区域（画布上下分块）里的 mm→px 变换 */
+function makeXf(rect, x0, x1, y0, y1, pad = 0.9) {
+  const sc = Math.min(rect.w / (x1 - x0), rect.h / (y1 - y0)) * pad;
+  const ox = rect.x + rect.w / 2 - ((x0 + x1) / 2) * sc;
+  const oy = rect.y + rect.h / 2;
+  return { s: sc, X: (x) => ox + x * sc, Y: (y) => oy - y * sc };
+}
+
+function draw() {
+  if (!W) return;
+  if (state.order && state.order.kind === "pal") { drawPalStage(); return; }
+
+  ctx.clearRect(0, 0, W, H);
+
+  const o = state.order, d = state.design, ev = evaluate(o, d, undefined, frameMax());
+  const t = o.t, R1 = d.R1, R2 = o.fixedR2, n = ev.mat.n;
+
+  // 整条链路算到视网膜
+  const es = eyeState(ev.Pv, o.sph);
+  state.lastEs = es;
+
+  const eyeH = Math.round(H * 0.58);
+  drawEye({ x: 0, y: 0, w: W, h: eyeH }, { R1, R2, t, n, ev, es });
+  drawChart({ x: 0, y: eyeH, w: W, h: H - eyeH }, es);
+
+  // 画布对屏幕阅读器是不可见的 —— 给它一段文字替代
+  // 过矫/欠矫的判定和面板里同一套：看 dev 和处方是否同向，不能只看 dev 正负
+  const over = ev.dev * o.sph > 0;
+  cv.setAttribute("aria-label",
+    "光路图。处方 " + fmtD(o.sph) + " D，实测 " + fmtD(ev.Pv) + " D，偏差 " +
+    (over ? "过矫 " : "欠矫 ") + Math.abs(ev.dev).toFixed(2) + " D；" +
+    "边缘厚度 " + (Number.isFinite(ev.edge) ? ev.edge.toFixed(2) : "做不出来") + " 毫米；" +
+    "顾客视力 " + (es.acuity >= 1.95 ? "2.0" : es.acuity.toFixed(2)) + "。" +
+    (ev.pass ? "这片合格。" : "这片不合格：" + ev.reasons.map((r) => r.text).join("；") + "。"));
+
+  updateReadout(ev, es);
+}
+
+// ── 渐进片：整块舞台换成面形等高线图 ──
+function drawPalStage() {
+  const ev = evaluatePal(state.order, state.design);
+  state.palEval = ev;
+  const D = DPR;
+
+  const padX = 16;
+  const profH = 62;
+  const gap = 18;
+  const top = 26;
+  const bottomGap = 34;
+  const mapS = Math.max(120,
+    Math.min(W - padX * 2, H - top - profH - gap - bottomGap - 14));
+  const mx = (W - mapS) / 2;
+  const my = top + Math.max(0, (H - top - profH - gap - bottomGap - mapS) / 2);
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const s = ev.stats, o = state.order;
+  drawPalMap(ctx, { x: mx * D, y: my * D, w: mapS * D, h: mapS * D }, ev.map, {
+    dpr: D, profileY: -9, frame: 45,
+    focus: state.palFocus,
+    annot: {
+      corridor: ev.params.corridor,
+      inset: ev.params.inset,
+      halfWidth: ev.params.halfWidth,
+      nearArea: s.nearArea,
+      nearNeed: o.need.nearArea ?? null,
+      nearMax: o.need.nearAreaMax ?? null,
+      nearAspect: s.nearAspect,
+      aspectMin: o.need.aspectMin ?? null,
+      aspectMax: o.need.aspectMax ?? null,
+      astigMax: s.astigMax,
+      astigNeed: o.need.astig,
+      insetRange: o.need.insetRange || PAL_INSET_RANGE,
+    },
+  });
+  drawPalProfile(ctx,
+    { x: (padX + 26) * D, y: (my + mapS + gap) * D, w: (W - padX * 2 - 26) * D, h: profH * D },
+    ev.map, { dpr: D, y: -9 });
+  ctx.restore();
+
+  // 画布的文字替代：讲清楚这张图上有什么、过没过
+  cv.setAttribute("aria-label",
+    "渐进片面形等值线图。 ADD " + state.order.add.toFixed(2) + "，通道 " +
+    ev.params.corridor.toFixed(0) + " 毫米，近用区半宽 " + ev.params.halfWidth.toFixed(1) +
+    " 毫米，内偏 " + ev.params.inset.toFixed(1) + " 毫米。" +
+    ev.checks.map((c) => {
+      const v = c.ratio ? c.val.toFixed(2) + " 比 1" : c.val.toFixed(c.unit === "D" ? 2 : 0) + " " + (c.unit || "");
+      return c.label + " " + v + (c.ok ? "，达标" : "，不达标");
+    }).join("；") + "。");
+
+  updatePalChecks(ev);
+}
+
+/** 验收读数：贴在画布右上角 */
+function updatePalChecks(ev) {
+  const box = $("palchecks");
+  if (!box) return;
+  box.classList.add("on");
+  const rows = ev.checks.map((c) => {
+    const u = c.unit || "";
+    const dec = c.unit === "D" ? 2 : 0;
+    let v;
+    if (c.ratio) {
+      v = c.val.toFixed(2) + " : 1 / " + (c.kind === "max" ? "≤" : "≥") + c.need.toFixed(2);
+    } else if (c.kind === "max") v = c.val.toFixed(dec) + " / ≤" + c.need.toFixed(dec) + " " + u;
+    else if (c.kind === "min") v = c.val.toFixed(dec) + " / ≥" + c.need.toFixed(dec) + " " + u;
+    else v = c.val.toFixed(1) + " 要 " + c.lo.toFixed(1) + "–" + c.hi.toFixed(1);
+    // 差多少，直接写出来 —— 「差 3」比「43 < 46」好读
+    let gap = "";
+    if (!c.ok && c.kind === "max") gap = " 差 " + (c.val - c.need).toFixed(c.ratio ? 2 : dec);
+    if (!c.ok && c.kind === "min") gap = " 差 " + (c.need - c.val).toFixed(c.ratio ? 2 : dec);
+    // 这一项刚从 ✗ 翻成 ✓ —— 给一次绿闪，这是渐进片唯一的「过关」反馈
+    const flipped = state.palPrev && state.palPrev[c.key] === false && c.ok;
+    return `<div class="pc ${c.ok ? "ok" : "no"}${flipped ? " flip" : ""}">` +
+      `<span class="k">${c.label}</span><b>${v}${gap}</b></div>`;
+  }).join("");
+  state.palPrev = Object.fromEntries(ev.checks.map((c) => [c.key, c.ok]));
+  box.innerHTML = `<div class="pc-h">验 收 / ACCEPT</div>` + rows;
+
+  const v = $("verdict");
+  v.className = "verdict " + (ev.pass ? "pass" : "fail");
+  // 手机上验收牌是藏起来的，所以这一行要把「几项不过、哪几项」说全
+  $("verdictText").textContent = ev.pass
+    ? "全部通过 —— 这片能交"
+    : ev.reasons.length + " 项不过：" + ev.checks.filter((c) => !c.ok).map((c) => c.label).join("、");
+}
+
+// ── 上半：镜片 → 眼睛 → 视网膜 ──
+function drawEye(rect, k) {
+  const { R1, R2, t, es } = k;
+  const corneaX = t + EYE.vertex;
+  const retinaX = corneaX + RETINA_MM;
+  const xf = makeXf(rect, -9, retinaX + 8, -13, 13, 0.92);
+  const { X, Y } = xf;
+
+  const eyeR = RETINA_MM / 2;
+  const eyeCx = corneaX + eyeR;
+
+  // 眼球（实心）
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(X(eyeCx), Y(0), eyeR * xf.s, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(30,45,62,.78)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(140,168,194,.5)";
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+  ctx.restore();
+
+  // 视网膜：眼球内侧的后半圈（±78° 就够，不要绕到角膜上去）
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(X(eyeCx), Y(0), (eyeR - 0.5) * xf.s, -1.36, 1.36);
+  ctx.strokeStyle = es.sharp ? "rgba(96,222,190,.85)" : "rgba(224,110,134,.80)";
+  ctx.lineWidth = 2.4;
+  ctx.stroke();
+  ctx.restore();
+
+  // 角膜
+  ctx.beginPath();
+  ctx.moveTo(X(corneaX), Y(5.4));
+  ctx.quadraticCurveTo(X(corneaX + 1.5), Y(0), X(corneaX), Y(-5.4));
+  ctx.strokeStyle = "rgba(160,184,206,.82)";
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // 虹膜 + 瞳孔
+  ctx.strokeStyle = "rgba(160,184,206,.72)";
+  ctx.lineWidth = 2.6;
+  for (const sgn of [1, -1]) {
+    ctx.beginPath();
+    ctx.moveTo(X(corneaX + 0.4), Y(sgn * 1.5));
+    ctx.lineTo(X(corneaX + 0.4), Y(sgn * 5.2));
+    ctx.stroke();
+  }
+
+  // 晶状体
+  const lensCx = corneaX + 3.4;
+  ctx.beginPath();
+  ctx.ellipse(X(lensCx), Y(0), 1.05 * xf.s, 2.6 * xf.s, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(90,158,200,.18)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(90,158,200,.5)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── 眼镜片 ──
+  const prof = lensProfile(R1, R2, t, SCENE.ap, 20);
+  ctx.beginPath();
+  prof.front.forEach((p, i) => i ? ctx.lineTo(X(p.x), Y(p.y)) : ctx.moveTo(X(p.x), Y(p.y)));
+  for (let i = prof.back.length - 1; i >= 0; i--) {
+    ctx.lineTo(X(prof.back[i].x), Y(prof.back[i].y));
+  }
+  ctx.closePath();
+  const gg = ctx.createLinearGradient(X(0), 0, X(t + 1), 0);
+  gg.addColorStop(0, "rgba(96,168,214,.42)");
+  gg.addColorStop(1, "rgba(170,216,246,.30)");
+  ctx.fillStyle = gg;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(150,214,246,.92)";
+  ctx.lineWidth = 1.7;
+  ctx.stroke();
+
+  // ── 光路 ──
+  // 真实的焦点偏离视网膜只有 0.1~1mm，在这张图上不足一个像素。
+  // 所以把"焦点相对视网膜的位移"放大 6 倍再画，并在图上注明。形变是放大，结论不变。
+  const EXAG = 6;
+  const hs = [-1.4, -0.7, 0.7, 1.4];
+  const vmm = es.vmm;
+  const canFocus = Number.isFinite(vmm) && vmm > 1;
+  const retinaDist = retinaX - corneaX;
+  let vDraw = vmm;
+  if (canFocus) {
+    vDraw = retinaDist + (vmm - retinaDist) * EXAG;
+    vDraw = Math.max(4, Math.min(retinaDist + 6.5, vDraw));
+  }
+
+  const rayCol = es.sharp ? "rgba(150,238,214,.92)" : "rgba(206,226,245,.82)";
+
+  for (const h of hs) {
+    // 平行光段
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(200,222,242,.42)";
+    ctx.lineWidth = 1;
+    ctx.moveTo(X(-9), Y(h));
+    ctx.lineTo(X(0), Y(h));
+    ctx.stroke();
+
+    // 镜片内 + 到角膜
+    ctx.beginPath();
+    ctx.strokeStyle = rayCol;
+    ctx.lineWidth = 1.1;
+    ctx.moveTo(X(0), Y(h));
+    ctx.lineTo(X(t), Y(h));
+    ctx.lineTo(X(corneaX), Y(h));
+    ctx.stroke();
+
+    // 眼内：光走到视网膜就停（视网膜不透光）
+    if (canFocus) {
+      const yRet = h * (1 - retinaDist / vDraw);
+      ctx.beginPath();
+      ctx.strokeStyle = rayCol;
+      ctx.lineWidth = 1.1;
+      ctx.moveTo(X(corneaX), Y(h));
+      ctx.lineTo(X(retinaX), Y(Math.max(-13, Math.min(13, yRet))));
+      ctx.stroke();
+
+      // 焦点在视网膜后面时，把虚的延长线画成虚线
+      if (vmm > retinaDist && vDraw > retinaDist) {
+        ctx.save();
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(200,222,242,.28)";
+        ctx.lineWidth = 1;
+        ctx.moveTo(X(retinaX), Y(yRet));
+        ctx.lineTo(X(corneaX + vDraw), Y(0));
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(224,110,134,.75)";
+      ctx.lineWidth = 1.1;
+      ctx.moveTo(X(corneaX), Y(h));
+      ctx.lineTo(X(retinaX), Y(h * 2.6));
+      ctx.stroke();
+    }
+  }
+
+  // 视网膜上的糊圈
+  if (canFocus) {
+    const yTop = Math.abs(hs[hs.length - 1] * (1 - retinaDist / vDraw));
+    ctx.save();
+    ctx.beginPath();
+    ctx.strokeStyle = es.sharp ? "rgba(96,222,190,.95)" : "rgba(224,110,134,.95)";
+    ctx.lineWidth = 3.2;
+    const bx = X(retinaX) - 1;
+    ctx.moveTo(bx, Y(yTop));
+    ctx.lineTo(bx, Y(-yTop));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 焦点光点
+  if (canFocus) {
+    const fx = corneaX + vDraw;
+    ctx.save();
+    const rg = ctx.createRadialGradient(X(fx), Y(0), 0, X(fx), Y(0), 7);
+    rg.addColorStop(0, es.sharp ? "rgba(140,255,214,.95)" : "rgba(150,205,245,.95)");
+    rg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(X(fx), Y(0), 7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // 标注
+  ctx.font = "10px ui-monospace,Consolas,monospace";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(110,132,152,.9)";
+  ctx.fillText("镜片", X(t / 2), Y(-6.8));
+  ctx.fillText("瞳孔", X(corneaX) + 6, Y(-6.8));
+  if (canFocus) {
+    ctx.fillStyle = es.sharp ? "rgba(96,222,190,.92)" : "rgba(150,190,230,.92)";
+    ctx.fillText("焦点", X(corneaX + vDraw), Y(4.6));
+  }
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(110,132,152,.72)";
+  ctx.fillText("视网膜", X(retinaX) - 44, Y(9.8));
+}
+
+// ── 下半：顾客看到的视力表 ──
+function drawChart(rect, es) {
+  const size = Math.min(rect.w * 0.40, rect.h * 0.58);
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h * 0.44;
+
+  const eSize = size * 0.62;
+  const u = eSize / 5;
+  const pad = eSize * 0.30;
+  const cw = eSize + pad * 2, ch = eSize + pad * 2;
+  const x0 = cx - cw / 2, y0 = cy - ch / 2;
+
+  // 卡片：纸面 + 印刷内框，方角，别用圆角
+  ctx.save();
+  ctx.beginPath();
+  roundRect(x0, y0, cw, ch, 2);
+  const paper = ctx.createLinearGradient(x0, y0, x0 + cw, y0 + ch);
+  paper.addColorStop(0, "#e9eff5");
+  paper.addColorStop(1, "#d5dfe8");
+  ctx.fillStyle = paper;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.55)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // 内框细线（像印刷的定位框）
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0 + 5.5, y0 + 5.5, cw - 11, ch - 11);
+  ctx.strokeStyle = "rgba(28,44,58,.20)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  const ex = cx - eSize / 2, ey = cy - eSize / 2;
+
+  // 1 笔画 ≈ 4 角分；上限 0.85 个笔画宽 —— 再糊就只剩一团灰，看不出那是 E
+  const blurPx = Math.min(u * 0.85, es.blurArcmin * (u / 4));
+  drawE(ex, ey, eSize, u, blurPx > 0.12 ? blurPx : 0);
+
+  // 卡片右下角的小字，像真实视力表上的行号
+  ctx.font = "9px ui-monospace,Consolas,monospace";
+  ctx.textAlign = "right";
+  ctx.fillStyle = "rgba(38,56,72,.55)";
+  ctx.fillText(es.acuity >= 1.95 ? "2.0" : es.acuity.toFixed(2), x0 + cw - 9, y0 + ch - 8);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(107,124,141,.9)";
+  ctx.font = "10px ui-monospace,Consolas,monospace";
+  ctx.fillText("顾 客 看 到 的", cx, y0 + ch + 17);
+  ctx.textAlign = "left";
+}
+
+function drawE(x, y, size, u, blurPx) {
+  drawEOnto(ctx, x, y, size, u, blurPx);
+}
+
+/** 在任意 2D 上下文里画一个 E 字标（标题页也要用，所以不能写死全局 ctx）。 */
+function drawEOnto(g, x, y, size, u, blurPx) {
+  const paint = () => {
+    g.fillStyle = "#0d141b";
+    for (const k of [0, 2, 4]) g.fillRect(x, y + k * u, size, u);
+    g.fillRect(x, y, u, size);
+  };
+  if (blurPx > 0 && typeof g.filter === "string") {
+    g.save();
+    g.filter = "blur(" + blurPx.toFixed(2) + "px)";
+    paint();
+    g.restore();
+  } else if (blurPx > 0) {
+    g.save();
+    g.globalAlpha = 0.26;
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      g.save();
+      g.translate(Math.cos(a) * blurPx * 0.5, Math.sin(a) * blurPx * 0.5);
+      paint();
+      g.restore();
+    }
+    g.restore();
+    g.save();
+    g.globalAlpha = 0.55;
+    paint();
+    g.restore();
+  } else {
+    paint();
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  roundRectOn(ctx, x, y, w, h, r);
+}
+
+function roundRectOn(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+// ── 文字读数 ──
+function updateReadout(ev, es) {
+  const v = $("verdict"), vt = $("verdictText");
+  const acu = es.acuity;
+  const acuText = acu >= 1.95 ? "2.0" : acu.toFixed(2);
+  const node = $("acuity");
+  if (node) node.textContent = acuText;
+
+  // 边缘厚度条：0~10mm 映射到 0~100%，装框上限处有刻度线
+  const edge = ev.edge;
+  const fmax = frameMax();
+  const fill = $("edgefill"), edgev = $("edgev"), note = $("edgenote");
+  if (fill) {
+    const pct = Number.isFinite(edge) ? Math.max(0, Math.min(100, (edge / 10) * 100)) : 100;
+    fill.style.width = pct + "%";
+  }
+  $("edgefield").classList.toggle("no-gauge", !state.owned.thickness);
+  // 公差带：这块毛坯可能落到的地方（要买测厚仪才看得见）
+  const band = $("edgeband");
+  if (band) {
+    const b = state.ground || !state.owned.thickness ? null : edgeBand(state.order, state.design);
+    if (b) {
+      const lo = Math.max(0, Math.min(100, (b.min / 10) * 100));
+      const hi = Math.max(0, Math.min(100, (b.max / 10) * 100));
+      band.style.left = lo + "%";
+      band.style.width = Math.max(0, hi - lo) + "%";
+      band.style.display = "";
+    } else {
+      band.style.display = "none";
+    }
+  }
+  if (edgev) edgev.textContent = Number.isFinite(edge) ? edge.toFixed(2) + " mm" : "—";
+  if (note) {
+    const b = state.ground || !state.owned.thickness ? null : edgeBand(state.order, state.design);
+    const risky = b && (b.max > fmax || b.min < 1) && !(b.nom > fmax || b.nom < 1);
+    const bad = !Number.isFinite(edge) || edge > fmax || edge < 1;
+    note.style.color = bad || risky ? "var(--bad)" : "var(--ink-faint)";
+    note.textContent = !state.owned.thickness
+      ? "没有测厚仪，公差带看不见（商城 ¥400）"
+      : !Number.isFinite(edge)
+        ? "这条弧做不出来"
+        : edge > fmax
+          ? "超过 " + fmax.toFixed(1) + " mm，装不进框"
+          : edge < 1
+            ? "低于 1.0 mm，一装就崩"
+            : risky
+              ? "公差带压在红线上，可能做废"
+              : "镜框最多装 " + fmax.toFixed(1) + " mm";
+  }
+
+  const opticalBad = ev.reasons.some((r) => r.code === "power");
+
+  // 焦度计：把「做出来多少度、处方多少、差多少」直接摊开
+  const pvEl = $("pv"), sphEl = $("sphv"), devEl = $("devv");
+  if (pvEl) pvEl.textContent = fmtD(ev.Pv) + " D";
+  if (sphEl) sphEl.textContent = fmtD(state.order.sph) + " D";
+  if (devEl) {
+    const a = Math.abs(ev.dev);
+    if (a <= 0.12) {
+      devEl.className = "focus-dev ok";
+      devEl.textContent = "在允差内（±0.12）";
+    } else {
+      devEl.className = "focus-dev bad";
+      // 过矫 = 度数做「过头」了，方向和处方的正负号同向；
+      // 负镜片做过头是更负，正镜片做过头是更正 —— 所以不能只看 dev 的正负
+      const over = ev.dev * state.order.sph > 0;
+      devEl.textContent = (over ? "过矫 " : "欠矫 ") + a.toFixed(2) + " D";
+    }
+  }
+
+  if (ev.pass) {
+    v.className = "verdict pass";
+    vt.textContent = "合格 · 顾客看得清（视力 " + acuText + "）";
+  } else if (opticalBad) {
+    v.className = "verdict fail";
+    // 视力好但度数超差：别再说「有点糊」，那会让人以为看错了
+    if (acu >= 1.0) {
+      vt.textContent = "看得清，但度数超差 " + Math.abs(ev.dev).toFixed(2) + " D（允差 ±0.12）—— 不算合格";
+    } else if (acu >= 0.5) vt.textContent = "差一点 · 有点糊（视力 " + acuText + "）";
+    else if (acu >= 0.15) vt.textContent = "看不清 · 顾客会凑近看（视力 " + acuText + "）";
+    else vt.textContent = "一片模糊 · 顾客当场退货（视力 " + acuText + "）";
+  } else {
+    // 度数对了，但机械上做不出来
+    v.className = "verdict fail";
+    const bad = ev.reasons.find((r) => r.code === "material" || r.code === "edge_thin");
+    vt.textContent = bad ? bad.text : "度数对了，但这片装不进框";
+  }
+}
+
+function fmtD(v) { return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2); }
+function signD(v) { return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2); }
+
+// ── 交互 ──
+const r1 = $("r1");
+r1.addEventListener("input", () => {
+  state.design.R1 = +r1.value;
+  $("r1v").textContent = state.design.R1.toFixed(1) + " mm";
+  draw();
+});
+$("reset").addEventListener("click", () => {
+  r1.value = 150; state.design.R1 = 150;
+  $("r1v").textContent = "150.0 mm";
+  draw();
+});
+
+// R₁ 微调：±0.5 mm 一格，方向键手感之外再给一对按钮
+function nudgeR1(delta) {
+  if (!state.order || state.order.kind === "pal") return;
+  const v = Math.max(60, Math.min(260, (state.design.R1 || 150) + delta));
+  state.design.R1 = v;
+  r1.value = String(v);
+  $("r1v").textContent = v.toFixed(1) + " mm";
+  draw();
+}
+$("r1dn").addEventListener("click", () => nudgeR1(-0.5));
+$("r1up").addEventListener("click", () => nudgeR1(0.5));
+
+// 商城：任何时候都能进
+$("storeOpen").addEventListener("click", openStore);
+$("storeClose").addEventListener("click", () => $("store").classList.remove("on"));
+$("store").addEventListener("click", (e) => {
+  if (e.target.id === "store") $("store").classList.remove("on");
+});
+
+$("grind").addEventListener("click", () => {
+  // 一单只能加工一次：避免连点重复结算（settle 不是幂等的）
+  if (state.ground) return;
+  const o = state.order;
+
+  // ── 渐进片走另一条路：没有毛坯赌局，只有面形对不对 ──
+  if (o.kind === "pal") {
+    const ev = evaluatePal(o, state.design);
+    const s = settle(o, ev, state, state.agreedPrice);
+    state.cash = s.cash;
+    state.ground = true;
+    state.finished++;
+    state.runOrders++;
+    state.daySpent += ev.mat.cost;
+    state.spent += ev.mat.cost;
+    if (ev.pass) {
+      state.dayRevenue += state.agreedPrice || 0;
+      state.revenue += state.agreedPrice || 0;
+      state.runRevenue += state.agreedPrice || 0;
+      state.reputation = Math.min(REP_MAX, state.reputation + 1);
+    } else {
+      state.dayFails++;
+      state.fails++;
+      state.runFails++;
+      state.reputation -= 1;
+    }
+    refreshHeader();
+    $("cash").textContent = "¥" + state.cash;
+    $("grind").disabled = true;
+    $("grind").textContent = "已交付";
+    $("next").style.display = "";
+    $("fhint").textContent = "这单做完了";
+    showResult(ev, s);
+    return;
+  }
+
+  const mat = resolveMaterial(o, state.design);
+  // 毛坯的真实厚度在这里才揭晓 —— 加工前只看得到公差带
+  const blank = blankOf(o, mat, state.seed);
+  state.blank = { ...blank, mat };
+  const ev = evaluate(o, state.design, blank.actual, frameMax());
+  const s = settle(o, ev, state, state.agreedPrice);
+  state.cash = s.cash;
+  state.ground = true;
+  state.finished++;
+  state.runOrders++;
+  if (state.lastEs) state.dayAcuities.push(state.lastEs.acuity);
+  state.daySpent += mat.cost;
+  state.spent += mat.cost;
+  if (ev.pass) {
+    state.dayRevenue += state.agreedPrice || 0;
+    state.revenue += state.agreedPrice || 0;
+    state.runRevenue += state.agreedPrice || 0;
+    state.reputation = Math.min(REP_MAX, state.reputation + 1);
+  } else {
+    state.dayFails++;
+    state.fails++;
+    state.runFails++;
+    state.reputation -= 1;      // 做废一次掉一点声誉
+  }
+  refreshHeader();
+  $("cash").textContent = "¥" + state.cash;
+  $("grind").disabled = true;
+  $("grind").textContent = "已加工";
+  $("next").style.display = "";
+  $("fhint").textContent = "这单做完了";
+  showResult(ev, s);
+});
+
+$("next").addEventListener("click", () => {
+  // 收工只看「今天做完几单」，不看轮次算术 —— 否则重复点击 / 走人 会把最后一单吞掉
+  if (state.finished >= DAY_ROUNDS) {
+    $("next").disabled = true;
+    $("next").textContent = "收工";
+    $("fhint").textContent = "今天到此为止";
+    showEnding();
+    return;
+  }
+  startRound(state.round + 1);
+});
+
+/** 开始第 r 轮：第 1 天的第 1 轮是教学单，其余每次给三张单子挑一张。 */
+function startRound(r) {
+  state.round = r;
+  if (r === 0 && state.day === 1) {
+    acceptOrder("o1");
+    return;
+  }
+  showBoard();
+}
+
+/** 订单板：三选一，没接的两位今天不候，明天还会来。 */
+function showBoard() {
+  // 只排除「今天已经接过的」—— 板子上的三张不消耗，否则 5 单的池子撑不住
+  const open = state.pool.filter((id) => !state.taken.includes(id) && isUnlocked(getOrder(id), state.certIndex, state.owned));
+  const customSlot = CUSTOM_ROUNDS.includes(state.round);
+  // 定制单只在定制轮出现，别把节奏搅乱
+  const base = open.filter((id) => customSlot || getOrder(id).kind !== "pal");
+  // 上一板已经亮过相的，这一板尽量不重复
+  const fresh = base.filter((id) => !state.recent.includes(id));
+  const available = fresh.length >= 3 ? fresh : base;
+
+  // 定制轮：一张定制单压轴，另外两张照旧是球镜 —— 一张就够慢了
+  const picks = [];
+  if (customSlot) {
+    const pals = available.filter((id) => getOrder(id).kind === "pal");
+    if (pals.length) picks.push(...drawPicks(pals, state.round, 1));
+  }
+  if (picks.length < 3) {
+    const rest = available.filter((id) => !picks.includes(id) && getOrder(id).kind !== "pal");
+    const bag = rest.length >= 3 - picks.length ? rest : available.filter((id) => !picks.includes(id));
+    picks.push(...drawPicks(bag, state.round, 3 - picks.length));
+  }
+  if (!picks.length) { showEnding(); return; }
+  state.recent = picks;
+
+  const custom = customSlot && picks.some((id) => getOrder(id).kind === "pal");  $("boardTitle").textContent = custom ? "第 " + (state.round + 1) + " 单 · 定制" : "今天的单子";
+  $("boardSub").textContent = custom
+    ? "渐进片。这一单慢，急不来 —— 但没有它，今天赚不到钱"
+    : "三张里挑一张，没接的两位今天不候　·　● 是难度，●●● 最难";
+
+  const list = $("boardList");
+  list.innerHTML = "";
+  for (const id of picks) {
+    const o = getOrder(id);
+    const card = document.createElement("button");
+    card.className = "order-card";
+    const head = o.kind === "pal"
+      ? '+' + o.add.toFixed(2) + "<i>ADD</i>"
+      : fmtD(o.sph) + "<i>D</i>";
+    card.innerHTML = `
+      <div class="oc-top">
+        <span class="oc-sph">${head}</span>
+        <span class="oc-price">¥${o.price}</span>
+      </div>
+      <div class="oc-line">「${o.line}」</div>
+      <div class="oc-meta">
+        <span>${o.kind === "pal" ? "渐进多焦点 · 定制" : o.materialList.map((m) => m.name).join(" / ")}</span>
+        <span class="stars">${"●".repeat(o.diff)}${"○".repeat(3 - o.diff)}</span>
+      </div>`;
+    card.onclick = () => {
+      $("board").classList.remove("on");
+      acceptOrder(id);
+    };
+    card.style.setProperty("--i", list.children.length);
+    list.appendChild(card);
+  }
+
+  // 今天还来了几位你接不了的 —— 把「缺什么」摆在订单板下面
+  const lockedIds = state.pool
+    .filter((id) => !state.taken.includes(id) && !picks.includes(id) &&
+      lockReason(getOrder(id), state.certIndex, state.owned))
+    .slice(0, 3);
+  const bl = $("boardLocked");
+  if (lockedIds.length) {
+    bl.innerHTML = '<div class="bl-h">今 天 还 来 了 几 位 · 你 接 不 了</div>' +
+      lockedIds.map((id) => {
+        const o = getOrder(id);
+        const head = o.kind === "pal" ? "+" + o.add.toFixed(2) + " ADD" : fmtD(o.sph) + " D";
+        return `<div class="bl-row"><span class="bl-v">${head}</span>` +
+          `<span class="bl-p">¥${o.price}</span>` +
+          `<span class="bl-w">${lockReason(o, state.certIndex, state.owned)}</span></div>`;
+      }).join("");
+    bl.style.display = "";
+  } else {
+    bl.innerHTML = "";
+    bl.style.display = "none";
+  }
+  $("board").classList.add("on");
+}
+
+/** 接下这一单，重置一切单内状态。 */
+function acceptOrder(id) {
+  state.order = getOrder(id);
+  const o = state.order;
+  if (!state.taken.includes(id)) state.taken.push(id);
+  state.ground = false;
+  state.blank = null;
+
+  if (o.kind === "pal") {
+    state.design = { ...PAL_ROUGH };
+    setPalMode(true);
+    $("sph").innerHTML = "+" + o.add.toFixed(2) + "<small>ADD</small>";
+    $("cname").textContent = o.who;
+    $("cline").textContent = o.line;
+    $("cthick").textContent = o.t.toFixed(2) + " mm";
+    $("lr2").textContent = "渐进面 · 自由曲面";
+    $("cr2").textContent = "自由曲面";
+    $("r1note").textContent = o.brief;
+    $("stagetag").textContent = "面形 / ASTIGMATISM MAP";
+    syncPalSliders();
+  } else {
+    state.design = { R1: 150 };
+    setPalMode(false);
+    $("sph").innerHTML = fmtD(o.sph) + "<small>D</small>";
+    $("cname").textContent = o.who;
+    $("cline").textContent = o.line;
+    $("cthick").textContent = o.t.toFixed(2) + " mm";
+    $("lr2").textContent = "−" + Math.abs(o.fixedR2).toFixed(1) + " mm";
+    $("cr2").textContent = "已定型";
+    $("r1note").textContent = o.brief;
+    $("stagetag").textContent = "光路 / OPTICAL PATH";
+    $("r1").value = String(state.design.R1);
+    $("r1v").textContent = state.design.R1.toFixed(1) + " mm";
+    buildMaterials();
+  }
+
+  $("oid").textContent = "单号 " + String(state.round + 1).padStart(4, "0");
+
+  $("grind").disabled = false;
+  $("grind").textContent = "加 工";
+  $("next").style.display = "none";
+  $("next").disabled = false;
+  $("next").textContent = "下一单 →";
+  $("fhint").textContent = o.kind === "pal"
+    ? "调四个参数，让三条验收线全绿"
+    : "拖动滑块，看顾客能不能看清";
+
+  draw();
+  if (!state.intro) openQuote();
+}
+
+/** 球镜 / 渐进片两套面板互换。 */
+function setPalMode(on) {
+  const show = (id, v) => { const el = $(id); if (el) el.style.display = v ? "" : "none"; };
+  show("r1field", !on);
+  show("matwrap", !on);
+  show("edgefield", !on);
+  show("legend", !on);
+  show("palwrap", on);
+  $("palchecks").classList.toggle("on", on);
+  // 焦度计那一段只有球镜有意义
+  const focus = document.querySelector(".field.focus");
+  if (focus) focus.style.display = on ? "none" : "";
+  if (on) {
+    $("verdict").className = "verdict";
+    $("verdictText").textContent = "调整面形，让三条验收线全绿";
+  }
+}
+
+/** 把 state.design 写回四个滑杆。 */
+function syncPalSliders() {
+  const d = state.design;
+  $("pcor").value = String(d.corridor);
+  $("phw").value = String(d.halfWidth);
+  $("pin").value = String(d.inset);
+  $("phd").value = String(d.hardness);
+  $("pcorv").textContent = d.corridor.toFixed(0) + " mm";
+  $("phwv").textContent = d.halfWidth.toFixed(1) + " mm";
+  $("pinv").textContent = d.inset.toFixed(1) + " mm";
+  $("phdv").textContent = d.hardness.toFixed(1);
+}
+
+/** 四个滑杆 → state.design。拖谁就点亮图上对应的那一块（一直亮到下个滑块）。 */
+function bindPalSlider(id, key, label, fmt) {
+  const el = $(id);
+  if (!el) return;
+  const on = () => {
+    if (!state.order || state.order.kind !== "pal") return;
+    state.palFocus = key;
+  };
+  el.addEventListener("input", () => {
+    on();
+    state.design[key] = parseFloat(el.value);
+    $(label).textContent = fmt(state.design[key]);
+    draw();
+  });
+  el.addEventListener("pointerdown", () => { on(); draw(); });
+  el.addEventListener("focus", () => { on(); draw(); });
+}
+bindPalSlider("pcor", "corridor", "pcorv", (v) => v.toFixed(0) + " mm");
+bindPalSlider("phw", "halfWidth", "phwv", (v) => v.toFixed(1) + " mm");
+bindPalSlider("pin", "inset", "pinv", (v) => v.toFixed(1) + " mm");
+bindPalSlider("phd", "hardness", "phdv", (v) => v.toFixed(1));
+
+/** 材料按钮：做不出来的度数直接禁用并划掉。 */
+function buildMaterials() {
+  const wrap = $("mats");
+  const o = state.order;
+  wrap.innerHTML = "";
+  for (const m of o.materialList) {
+    const b = document.createElement("button");
+    b.textContent = m.name;
+    const impossible = o.sph < m.maxMinus || o.sph > m.maxPlus;
+    if (impossible) {
+      b.disabled = true;
+      b.title = "这块料压不出这个度数";
+    }
+    if (m.id === resolveMaterial(o, state.design).id) b.className = "on";
+    b.onclick = () => {
+      state.design.materialId = m.id;
+      buildMaterials();
+      draw();
+    };
+    wrap.appendChild(b);
+  }
+  $("matv").textContent = resolveMaterial(o, state.design).name;
+}
+
+function showResult(ev, s) {
+  const sheet = $("sheet");
+  const reasonsHtml = ev.reasons.map((r) =>
+    `<li>${r.text}<span class="d">${r.detail}</span></li>`).join("");
+
+  // 毛坯实测：把「那块料到底多厚」摊开讲，赌才有交代
+  let blankHtml = "";
+  const b = state.blank;
+  if (b) {
+    const dev = b.off;
+    const dir = Math.abs(dev) < 0.005 ? "正好" : dev > 0 ? "厚" : "薄";
+    const within = Math.abs(dev) <= b.tol + 1e-6;
+    blankHtml = `<div class="blank">
+      <span class="k">本次用料</span>
+      标称 ${b.nominal.toFixed(2)} mm，实测 <b>${b.actual.toFixed(2)} mm</b>
+      （${dir} ${Math.abs(dev).toFixed(2)}，${b.mat ? b.mat.name : ""} 公差 ±${b.tol.toFixed(2)}，${within ? "在公差内" : "超出公差"}）
+    </div>`;
+  }
+
+  sheet.className = "card sheet";
+  sheet.innerHTML = `
+    <h2>${ev.pass ? "交了货" : "废了"}</h2>
+    <div class="sub">${ev.pass ? "顾客接过眼镜，戴上试了试。" : "顾客看了看镜片，没说话。"}</div>
+    ${ev.pass ? "" : `<ul class="reasons">${reasonsHtml}</ul>`}
+    ${blankHtml}
+    <div class="total"><span>${s.lines.join(" · ")}</span>
+      <b class="${s.delta >= 0 ? "up" : "down"}">${s.delta >= 0 ? "+" : "−"}¥${Math.abs(s.delta)}</b></div>
+    ${lessonBlock(ev)}
+    <div class="tap">点任意处继续</div>
+  `;
+  $("modal").classList.add("on");
+  // 整个遮罩都能点：按钮在底部栏，被这层盖住了，所以必须让"点哪里都算"
+  $("modal").onclick = () => { $("modal").classList.remove("on"); };
+}
+
+/**
+ * 「学到一件事」并进结果卡里 —— 原来要连点两次，5 单一共 10 次。
+ * 同一个订单的讲解只展开一次，之后再遇到只留数字。
+ */
+function lessonBlock(ev) {
+  const o = state.order;
+  const detail = ev.kind === "pal"
+    ? `ADD ${o.add.toFixed(2)}，通道 ${ev.params.corridor.toFixed(0)} mm，近用区半宽 ${ev.params.halfWidth.toFixed(1)} mm，
+       内偏 ${ev.params.inset.toFixed(1)} mm。近用区 <span class="em">${ev.stats.nearArea.toFixed(0)} mm²</span>，
+       周边像散 <span class="em">${ev.stats.astigMax.toFixed(2)} D</span>，
+       通道半宽 <span class="em">${ev.stats.corridorHalf.toFixed(1)} mm</span>。`
+    : `前表面 (n−1)/R₁ = <span class="em">${fmtD(ev.P1)} D</span>，
+       后表面 (n−1)/R₂ = <span class="em">${fmtD(ev.P2)} D</span>，
+       合成 ${fmtD(ev.Pv)} D。边缘 ${ev.edge.toFixed(2)} mm。`;
+
+  const seen = state.lessonsSeen.has(o.id);
+  state.lessonsSeen.add(o.id);
+  if (seen) {
+    return `<div class="lesson-inline"><div class="li-tag">这 一 单 的 数</div><p class="li-num">${detail}</p></div>`;
+  }
+  return `<div class="lesson-inline">
+      <div class="li-tag">学 到 一 件 事</div>
+      <p>${o.lesson.body}</p>
+      <p class="li-num">${detail}</p>
+    </div>`;
+}
+
+
+// ── 标题页：一张 E 字标从糊到清，1.15 秒 ──
+const tcv = $("titlefx");
+const tctx = tcv.getContext("2d");
+const TDPR = Math.min(devicePixelRatio || 1, 2);
+tcv.width = 200 * TDPR;
+tcv.height = 168 * TDPR;
+tctx.setTransform(TDPR, 0, 0, TDPR, 0, 0);
+
+function drawTitleFrame(t) {
+  const w = 200, h = 168;
+  tctx.clearRect(0, 0, w, h);
+  const eSize = 94;
+  const u = eSize / 5;
+  const pad = eSize * 0.28;
+  const cw = eSize + pad * 2;
+  const x0 = (w - cw) / 2, y0 = (h - cw) / 2;
+
+  tctx.save();
+  roundRectOn(tctx, x0, y0, cw, cw, 2);
+  tctx.fillStyle = "#e9eff5";
+  tctx.fill();
+  tctx.strokeStyle = "rgba(0,0,0,.55)";
+  tctx.lineWidth = 1;
+  tctx.stroke();
+  tctx.restore();
+
+  tctx.save();
+  tctx.beginPath();
+  tctx.rect(x0 + 5.5, y0 + 5.5, cw - 11, cw - 11);
+  tctx.strokeStyle = "rgba(28,44,58,.20)";
+  tctx.lineWidth = 1;
+  tctx.stroke();
+  tctx.restore();
+
+  const blur = 24 * Math.pow(1 - t, 2.4);
+  drawEOnto(tctx, (w - eSize) / 2, (h - eSize) / 2, eSize, u, blur);
+}
+
+let titleRaf = 0;
+function runTitleAnim() {
+  const t0 = performance.now();
+  cancelAnimationFrame(titleRaf);
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / 1150);
+    drawTitleFrame(t);
+    if (t < 1) {
+      titleRaf = requestAnimationFrame(step);
+    } else {
+      $("title").classList.add("focused");
+    }
+  };
+  titleRaf = requestAnimationFrame(step);
+}
+
+// ── 对话 ──
+const OPENING = [
+  "来了。",
+  "机子给你热好了。后表面我车完了，你只管磨前面那个弧。",
+  "磨到多少、客人戴上清不清楚 —— 你自己看。",
+  "料钱你先垫。做废了，退不了。",
+  "还有，别磨过头。过矫和欠矫，客人一样骂你。",
+  "赚够一千五，这台机器以后归你使。",
+];
+
+/** 第二天起老板不重复那套话了。 */
+function bossLinesFor(day) {
+  if (day <= 1) return OPENING;
+  if (day === 2) return ["又来了。", "昨天那几片我看了。别废话，干活。"];
+  if (day === 3) return ["第三个早上了。", "账上那点钱，离这台机器还远着呢。"];
+  return ["机器还没归你。"];
+}
+
+let dlgLines = [];
+let dlgIdx = 0;
+let dlgTimer = 0;
+let dlgFull = "";
+let dlgTyping = false;
+let dlgDone = null;
+
+function runDialogue(lines, who, onDone) {
+  dlgLines = lines;
+  dlgIdx = 0;
+  dlgDone = onDone || null;
+  $("dlgWho").textContent = who || "老板";
+  $("dialogue").classList.add("on");
+  showDlgLine();
+}
+
+function showDlgLine() {
+  const txt = dlgLines[dlgIdx] ?? "";
+  dlgFull = txt;
+  dlgTyping = true;
+  let i = 0;
+  clearInterval(dlgTimer);
+  $("dlgText").textContent = "";
+  dlgTimer = setInterval(() => {
+    i++;
+    if (i >= txt.length) {
+      clearInterval(dlgTimer);
+      dlgTyping = false;
+      $("dlgText").textContent = txt;
+      return;
+    }
+    $("dlgText").textContent = txt.slice(0, i);
+  }, 28);
+}
+
+function advanceDialogue() {
+  if (dlgTyping) {
+    clearInterval(dlgTimer);
+    dlgTyping = false;
+    $("dlgText").textContent = dlgFull;
+    return;
+  }
+  dlgIdx++;
+  if (dlgIdx >= dlgLines.length) {
+    endDialogue();
+    return;
+  }
+  showDlgLine();
+}
+
+function endDialogue() {
+  clearInterval(dlgTimer);
+  $("dialogue").classList.remove("on");
+  const cb = dlgDone;
+  dlgDone = null;
+  if (cb) cb();
+}
+
+// ── 一天结束 ──
+function showEnding() {
+  if (state.ended) { renderDayEnd(); return; }   // 幂等：结算只能进一次
+  state.ended = true;
+  // 房租只在当天第一次结算时扣
+  if (!state.rentPaid) {
+    state.cash -= RENT;
+    state.daySpent += RENT;
+    state.rentPaid = true;
+  }
+  renderDayEnd();
+}
+
+function certTitle() {
+  return state.certIndex >= CERTS.length ? OWNER_TITLE : CERTS[state.certIndex].title;
+}
+
+function refreshHeader() {
+  const t = $("rankTitle"), r = $("repv"), c = $("cash");
+  if (t) t.textContent = certTitle();
+  if (c) c.textContent = "¥" + state.cash;
+  if (r) {
+    r.textContent = String(Math.max(0, state.reputation));
+    r.style.color = state.reputation <= 2 ? "var(--bad)" : "";
+  }
+}
+
+/** 钱变了就闪一下 —— 整个游戏只有这一处数字在持续变动，值得一个反馈 */
+function pulseCash() {
+  const c = $("cash");
+  if (!c) return;
+  c.classList.remove("pulse");
+  void c.offsetWidth;          // 强制回流，让动画能重播
+  c.classList.add("pulse");
+}
+
+function renderDayEnd() {
+  const money = state.cash;
+  const n = state.dayAcuities.length;
+  const avg = n ? state.dayAcuities.reduce((a, b) => a + b, 0) / n : 0;
+
+  $("dayTag").textContent = "第 " + state.day + " 天 · 打烊";
+  $("endMoney").textContent = "¥" + money;
+  $("endRevenue").textContent = "¥" + state.dayRevenue;
+  $("endSpent").textContent = "¥" + state.daySpent;
+  // 商城消费单独列一行 —— 否则三个数永远加不起来
+  const shopCell = $("endShopCell");
+  if (shopCell) {
+    shopCell.style.display = state.dayShop > 0 ? "" : "none";
+    $("endShop").textContent = "¥" + state.dayShop;
+  }
+  $("endFails").textContent = state.dayFails + " 片";
+  $("endAcu").textContent = n ? (avg >= 1.95 ? "2.0" : avg.toFixed(2)) : "—";
+  $("endRep").textContent = Math.max(0, state.reputation) + " / " + REP_MAX;
+
+  const rank = $("endRank"), sub = $("endSub"), again = $("again"), shop = $("shop");
+  shop.innerHTML = "";
+
+  // 被开除
+  if (state.reputation <= 0) {
+    rank.textContent = "被开除了";
+    sub.textContent = "老板把工牌摘下来：「明天不用来了。」";
+    again.textContent = "重 新 来 过";
+    again.onclick = () => location.reload();
+    $("ending").classList.add("on");
+    return;
+  }
+
+  rank.textContent = certTitle();
+
+  if (state.cash < 0) {
+    sub.textContent = "账上见底了，房东在门口等着。";
+    again.textContent = "重 新 来 过";
+    again.onclick = () => location.reload();
+    $("ending").classList.add("on");
+    return;
+  }
+
+  // 商城：把「还差什么」摊开，而不是只给一颗「下一张证」按钮
+  const left = STORE_ITEMS.filter((it) => !isOwned(it));
+  const afford = left.filter((it) => canBuy(it, state).ok);
+  sub.textContent = !left.length
+    ? "该买的都买了。"
+    : afford.length
+      ? "账上 ¥" + money + "，商城里有 " + afford.length + " 件现在买得起。"
+      : "账上 ¥" + money + "，还差 " + Math.min(...left.map((it) => it.price)) + " 元起下一件。";
+
+  const btn = document.createElement("button");
+  btn.className = "shopitem";
+  btn.innerHTML = '<span class="si-name">进 商 城</span>' +
+    '<span class="si-note">资质 · 工作台 · 门店</span>' +
+    '<span class="si-price">' + left.length + " 件</span>";
+  btn.onclick = openStore;
+  shop.appendChild(btn);
+
+  again.textContent = "再 来 一 天";
+  again.onclick = restartDay;
+  $("ending").classList.add("on");
+}
+
+/** 这件东西是不是已经有了（证看头衔，设备看 owned）。 */
+function isOwned(item) {
+  if (item.kind === "cert") return state.certIndex >= item.cert;
+  return !!state.owned[item.key];
+}
+
+// ── 商城 ──
+function openStore() {
+  renderStore();
+  $("store").classList.add("on");
+}
+
+function renderStore() {
+  $("storeCash").textContent = "¥" + state.cash;
+  const body = $("storeBody");
+  body.innerHTML = "";
+  state.storeIndex = 0;
+  for (const g of STORE_GROUPS) {
+    const items = STORE_ITEMS.filter((it) => it.group === g.key);
+    if (!items.length) continue;
+    const sec = document.createElement("div");
+    sec.className = "st-group";
+    const h = document.createElement("h3");
+    h.innerHTML = g.name + "<span>" + g.hint + "</span>";
+    sec.appendChild(h);
+    for (const it of items) sec.appendChild(storeRow(it));
+    body.appendChild(sec);
+  }
+  state.justBought = null;
+}
+
+function storeRow(item) {
+  const owned = isOwned(item);
+  const can = canBuy(item, state);
+  // 只把「前置没满足」的压暗；单纯的钱不够要看得清 —— 那是目标
+  const blocked = !owned && !can.ok && can.why !== "钱不够";
+  const el = document.createElement("div");
+  el.className = "st-item" + (owned ? " owned" : blocked ? " blocked" : "");
+  if (state.justBought === item.key) el.classList.add("just-bought");
+  el.style.setProperty("--i", state.storeIndex = (state.storeIndex || 0) + 1);
+  el.dataset.key = item.key;
+  el.innerHTML =
+    '<div class="st-main">' +
+      '<div class="st-name">' + item.name + (item.kind === "shop" ? "<em>终 局</em>" : "") + "</div>" +
+      '<div class="st-note">' + item.note + "</div>" +
+      (owned ? "" : '<div class="st-gain">→ ' + item.gain + "</div>") +
+    "</div>" +
+    '<div class="st-side">' +
+      '<div class="st-price">¥' + item.price + "</div>" +
+      (owned
+        ? '<span class="st-tag">已 拥 有</span>'
+        : '<button class="st-buy"' + (can.ok ? "" : " disabled") + ">" +
+          (can.ok ? "购 买" : can.why) + "</button>") +
+    "</div>";
+  if (!owned) {
+    const b = el.querySelector("button");
+    if (b) b.onclick = () => buyStoreItem(item);
+  }
+  return el;
+}
+
+function buyStoreItem(item) {
+  const can = canBuy(item, state);
+  if (!can.ok) return;
+  state.cash -= item.price;
+  // 商城消费必须进账 —— 否则打烊卡上的三个数永远加不起来
+  state.daySpent += item.price;
+  state.dayShop += item.price;
+  state.spent += item.price;
+  state.runShop += item.price;
+  if (item.kind === "cert") state.certIndex = item.cert;
+  else if (item.kind === "tool") state.owned[item.key] = true;
+
+  state.justBought = item.key;   // 买下的那一条闪一下，告诉玩家「就是它」
+  refreshHeader();
+  pulseCash();
+
+  if (item.kind === "shop") { showWin(); return; }
+  renderStore();
+  if (state.order) draw();
+  // 如果是从打烊卡进的商城，买完要把卡也刷新
+  if ($("ending").classList.contains("on")) renderDayEnd();
+}
+
+function showWin() {
+  state.certIndex = CERTS.length;
+  refreshHeader();
+  $("store").classList.remove("on");
+  renderDayEnd();
+  $("dayTag").textContent = "终 局 / THE END";
+  $("endRank").textContent = OWNER_TITLE;
+  $("endSub").textContent = "老板把钥匙扔在台上，摘下工牌，走出玻璃门，回头看了一眼招牌。";
+
+  // 这一屏要交代的是「整局」，不是「最后一天」
+  const spentAll = state.spent + state.runShop + RENT * state.day;
+  const grid = document.querySelector("#ending .end-grid");
+  if (grid) {
+    grid.innerHTML =
+      "<div><span>用了</span><b>" + state.day + " 天</b></div>" +
+      "<div><span>做单</span><b>" + state.runOrders + " 张</b></div>" +
+      "<div><span>整局收入</span><b>¥" + state.runRevenue + "</b></div>" +
+      "<div><span>整局支出</span><b>¥" + spentAll + "</b></div>" +
+      "<div><span>做废</span><b>" + state.runFails + " 片</b></div>" +
+      "<div><span>最后声誉</span><b>" + Math.max(0, state.reputation) + " / " + REP_MAX + "</b></div>";
+  }
+
+  $("shop").innerHTML = "";
+  $("again").textContent = "重 新 开 张";
+  $("again").onclick = () => location.reload();
+}
+
+/** 换一天：钱留着，单子和轮次重置。 */
+function restartDay() {
+  $("ending").classList.remove("on");
+  state.day += 1;
+  state.round = 0;
+  state.pool = ORDERS.slice(1).map((o) => o.id);
+  state.taken = [];
+  state.recent = [];
+  state.finished = 0;
+  state.dayShop = 0;
+  state.ended = false;
+  state.dayRevenue = 0;
+  state.daySpent = 0;
+  state.dayFails = 0;
+  state.dayAcuities = [];
+  state.rentPaid = false;
+  state.acuities = [];
+  state.fails = 0;
+  $("dayno").textContent = String(state.day);
+  $("ending").classList.remove("on");
+  runDialogue(bossLinesFor(state.day), "老板", () => {
+    state.intro = false;
+    startRound(0);
+  });
+}
+
+// ── 报价：顾客心里有个价，你只能从他的话里猜 ──
+function openQuote() {
+  const o = state.order;
+  state.agreedPrice = null;
+  // 上限给到常价的 2 倍：拉满必然超线，顾客会走。
+  // 原来是 1.4 倍 —— 那正好等于最大方顾客的心理价，于是"拖到底"就是最优解。
+  const lo = Math.round((o.price * 0.5) / 20) * 20;
+  const hi = Math.round((o.price * 2.0) / 20) * 20;
+  const card = $("quoteCard");
+  card.innerHTML = `
+    <div class="q-tag">报 价 / QUOTE</div>
+    <div class="q-line">「${o.line}」</div>
+    <div class="q-ref">店里常价 <b>¥${o.price}</b>　·　能谈多少看你本事，材料自垫、做废不退</div>
+    <div class="q-row"><span>你的报价</span><b id="qv">¥${o.price}</b></div>
+    <input type="range" id="qr" min="${lo}" max="${hi}" step="10" value="${o.price}">
+    <button class="btn" id="qgo">报 价</button>`;
+  $("quote").classList.add("on");
+  const r = $("qr");
+  r.oninput = () => { $("qv").textContent = "¥" + r.value; };
+  $("qgo").onclick = () => resolveQuote(+r.value);
+}
+
+function resolveQuote(quote) {
+  const o = state.order;
+  const out = quoteOutcome(o, quote);
+  const card = $("quoteCard");
+
+  if (out.kind === "deal") {
+    state.agreedPrice = out.price;
+    card.innerHTML = `
+      <div class="q-tag">成 交</div>
+      <div class="q-line">「¥${out.price}？行，就这个价。」</div>
+      <div class="q-ref">材料先垫，做废了退不了</div>
+      <button class="btn" id="qok">开 工</button>`;
+    $("qok").onclick = () => $("quote").classList.remove("on");
+    return;
+  }
+
+  if (out.kind === "counter") {
+    card.innerHTML = `
+      <div class="q-tag">还 价</div>
+      <div class="q-line">「¥${out.price}，再多我给不起。」</div>
+      <div class="q-ref">他心里的底线大概就在这个数附近</div>
+      <button class="btn" id="qaccept">接受 ¥${out.price}</button>
+      <button class="btn ghost" id="qdrop">这单不做了</button>`;
+    $("qaccept").onclick = () => {
+      state.agreedPrice = out.price;
+      card.innerHTML = `
+        <div class="q-tag">成 交</div>
+        <div class="q-line">「行，那就这样。」</div>
+        <button class="btn" id="qok">开 工</button>`;
+      $("qok").onclick = () => $("quote").classList.remove("on");
+    };
+    $("qdrop").onclick = () => { $("quote").classList.remove("on"); skipOrder(); };
+    return;
+  }
+
+  // 走人
+  card.innerHTML = `
+    <div class="q-tag">走 了</div>
+    <div class="q-line">「……那我再转转吧。」</div>
+    <div class="q-ref">他心里的价位是 <b>¥${out.reserve}</b>，你报高了</div>
+    <button class="btn" id="qnext">下 一 位</button>`;
+  $("qnext").onclick = () => { $("quote").classList.remove("on"); skipOrder(); };
+}
+
+/** 这单黄了：不结算，直接进下一轮。 */
+function skipOrder() {
+  state.agreedPrice = 0;
+  state.finished++;
+  if (state.finished >= DAY_ROUNDS) { showEnding(); return; }
+  startRound(state.round + 1);
+}
+
+// ── 启动 ──
+function boot() {
+  addEventListener("resize", resize);
+  // 直通车：?cert=2&order=p1 直接从高级技师的渐进片单开局（调试 / 演示用）
+  const q = new URLSearchParams(location.search);
+  const devOrder = q.get("order");
+  if (q.has("cert")) {
+    state.certIndex = Math.max(0, Math.min(CERTS.length, parseInt(q.get("cert"), 10) || 0));
+    state.cash = Math.max(state.cash, 6000);
+  }
+  $("dayno").textContent = String(state.day);
+  refreshHeader();
+  if (devOrder && getOrder(devOrder)) {
+    state.round = 1;
+    state.pool = ORDERS.slice(1).map((o) => o.id).filter((id) => id !== devOrder);
+    acceptOrder(devOrder);
+    if (q.has("design") && state.order.kind === "pal") {
+      const [c, hw, ins, hd] = q.get("design").split(",").map(Number);
+      state.design = { corridor: c, inset: ins, halfWidth: hw, hardness: hd };
+      syncPalSliders();
+      draw();
+    }
+  } else {
+    startRound(0);
+  }
+  resize();
+  runTitleAnim();
+  if (q.has("store")) setTimeout(openStore, 30);
+  if (q.has("dayend")) setTimeout(showEnding, 30);
+
+  // 开始营业 → 老板交代 → 正式开工
+  $("startbtn").addEventListener("click", () => {
+    $("title").classList.remove("on");
+    runDialogue(bossLinesFor(state.day), "老板", () => {
+      state.intro = false;
+      $("fhint").textContent = "拖动滑块，看顾客能不能看清";
+      if (q.has("board")) {
+        if (!q.has("cert")) {
+          state.certIndex = 2;
+          state.owned.freeform = true; state.owned.thickness = true; state.owned.grinder = true;
+        }
+        state.round = Math.max(1, parseInt(q.get("board"), 10) || 2);
+        try { showBoard(); } finally { /* 调试入口：出错就直接抛，别吞 */ }
+        return;
+      }
+      if (q.has("auto")) { state.agreedPrice = state.order.price; return; }
+      openQuote();
+    });
+  });
+
+  $("dlgBox").addEventListener("click", advanceDialogue);
+  $("dlgSkip").addEventListener("click", (e) => {
+    e.stopPropagation();
+    endDialogue();
+  });
+  // 「再来一天 / 重新开张」的行为由 showEnding 按是否通关决定，这里不再绑死
+}
+boot();
+// ESM 里不能用 new ResizeObserver(...).observe(...)；单独声明一个变量，
+// 并且放到 boot() 外面 —— 这样即使它出问题也不会拦住首屏渲染。
+const ro = new ResizeObserver(function () { resize(); });
+ro.observe(cv.parentElement);
+
+})();
+</script>
+</body>
+</html>
