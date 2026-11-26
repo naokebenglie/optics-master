@@ -479,7 +479,8 @@ footer::before{
   .storebtn{margin-right:0;font-size:9.5px;padding:4px 9px}
 
   #app{padding:6px}
-  main{grid-template-rows:auto minmax(340px,1fr) auto;gap:6px}
+  /* 光路图给固定高度；四块面板各自 natural 高，页面滚动看下面两块 */
+  main{grid-template-rows:auto minmax(300px,44vh) auto;gap:6px}
 
   .rx{padding:8px 10px;gap:8px}
   .rx-value{font-size:26px}
@@ -488,7 +489,13 @@ footer::before{
   .cust .portrait{display:none}
 
   .knobs{padding:8px 10px 10px;gap:10px}
-  .knobs > *{flex:1 1 120px}
+  /* 手机上一个字段一行、滑块占满宽度。
+     原来的 row+wrap 会让四五个字段挤一行，每个只有 170px，
+     标签折行、滑块短到拖不准。 */
+  .knobs{flex-direction:column;flex-wrap:nowrap}
+  .knobs > *{flex:0 0 auto;width:100%}
+  .field-head{flex-wrap:nowrap;gap:8px}
+  .field-head .n{font-size:12px;white-space:nowrap}
   .field-head .n{font-size:11px}
   .knob-val{font-size:13px}
 
@@ -954,8 +961,16 @@ footer::before{
 @media (max-width:560px){
   /* 验收牌在 375 宽会盖住整张图，藏掉；改由底部那一行说「几项不过、哪几项」 */
   .palchecks.on{display:none}
-  /* 让页面自然滚动，别把内容硬塞进 100vh；底部留出 sticky footer 的高度 */
-  #app{height:auto;min-height:100dvh;padding-bottom:78px}
+  /* 让页面自然滚动，别把内容硬塞进 100vh；
+     关键：body 原来是 overflow:hidden，手机上一屏放不下时
+     「加工 / SETUP」那一整块会被裁掉 —— 必须放开滚动。 */
+  html,body{height:auto}
+  body{
+    overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:contain;
+  }
+  #app{height:auto;min-height:100dvh;padding-bottom:96px}
   footer{
     position:sticky;bottom:0;z-index:5;
     background:linear-gradient(180deg,rgba(8,11,15,0),rgba(8,11,15,.96) 34%);
@@ -995,6 +1010,108 @@ button,input[type=range],.order-card,.st-item,.shopitem,.storebtn{touch-action:m
 .order-card:focus-visible,
 .st-buy:focus-visible,
 .shopitem:focus-visible{outline-offset:1px}
+
+/* ══════════════════════════════════════════════════════════════
+   自适应底盘（覆盖层，必须放最后）
+   ──────────────────────────────────────────────────────────────
+   目标：任何分辨率下元素不溢出、不互相遮挡。四条规则：
+
+   1. 断点只决定「几张牌怎么摆」，用 grid-template-areas 表达，
+      不再靠 grid-template-columns 的隐式顺序。
+   2. 所有可收缩单元的 min-width / min-height 归零 ——
+      否则子内容的固有宽高会把轨道顶破（flex/grid 的经典坑）。
+   3. 放不下时由 #app 自己滚，绝不裁切。
+   4. 面板内部自己滚（.knobs），不把压力传导给兄弟节点。
+
+   矮屏只压「留白」，不压内容；窄屏只改「排列」，不改字号。
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  /* 间距只用 4px 的倍数（8 / 12 / 16），clamp 在两端之间插值 */
+  --app-pad: clamp(8px, 1vmin, 16px);
+  --gap-c:   clamp(8px, .9vmin, 12px);
+  --panel-w: clamp(198px, 17.5vw, 250px);
+  --stage-min: 220px;
+}
+
+body{overflow:hidden}
+
+#app{
+  height:100dvh;
+  min-height:0;
+  /* 中间行用 minmax(min-content,1fr)：
+     大屏时撑满剩余高度，小屏时绝不小于内容高度 —— 这是不裁切的关键 */
+  grid-template-rows:auto minmax(min-content,1fr) auto;
+  /* 安全区：刘海 / 圆角 / 手势条，四边都让开 */
+  padding:
+    max(var(--app-pad), env(safe-area-inset-top))
+    max(var(--app-pad), env(safe-area-inset-right))
+    max(var(--app-pad), env(safe-area-inset-bottom))
+    max(var(--app-pad), env(safe-area-inset-left));
+  gap:var(--gap-c);
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+}
+
+header{padding:calc(var(--app-pad) * .55) 0 calc(var(--app-pad) * .65)}
+
+main{
+  grid-template-columns:var(--panel-w) minmax(0,1fr) var(--panel-w);
+  grid-template-rows:minmax(min-content,1fr);
+  grid-template-areas:"rx stage knobs";
+  gap:var(--gap-c);
+  min-width:0;
+  min-height:0;
+}
+main > .rx   {grid-area:rx;   min-width:0; min-height:max-content}
+main > .stage{grid-area:stage;min-width:0; min-height:var(--stage-min)}
+/* 关键：加工面板的 min-height 用 max-content，
+   否则父级栅格会把这一行压扁，面板只能自己裁掉内容。 */
+main > .knobs{grid-area:knobs;min-width:0; min-height:max-content;
+              overflow:visible}
+
+footer{position:static;flex-wrap:wrap;row-gap:6px}
+
+/* 中屏及以下：放弃栅格，改 flex 竖排。
+   栅格的 auto 行会被容器高度压扁，导致面板只能自己裁；
+   flex 竖排里每个面板 flex:0 0 auto，高度就是内容高度，
+   放不下由 #app 整页滚 —— 永不裁切、永不重叠。 */
+@media (max-width:1179px){
+  main{
+    display:flex;flex-direction:column;
+    gap:var(--gap-c);
+    min-height:0;
+  }
+  main > .rx,main > .knobs{flex:0 0 auto;width:100%;min-height:0}
+  main > .stage{flex:0 0 auto;width:100%;height:clamp(220px,42vh,460px);min-height:0}
+  main > .knobs{overflow:visible}
+  .knobs{flex-direction:column;flex-wrap:nowrap}
+  .knobs > *{flex:0 0 auto;width:100%}
+  .field-head{flex-wrap:nowrap;gap:8px}
+  .field-head .n{white-space:nowrap}
+  /* 触摸目标：手机上 ± 提到 44×44（iOS 44pt / Android 48dp） */
+  .nudge{gap:8px}
+  .nudge button{width:44px;height:44px;font-size:18px}
+  input[type=range]{height:36px}
+}
+
+/* 屏上正文：限制行长，别在大屏铺满（规范 65–75ch） */
+main .say,#cline{max-width:34em}
+/* 矮屏：只压纵向留白，不压内容 */
+@media (max-height:680px){
+  :root{--app-pad:6px; --gap-c:6px}
+  header{padding:4px 0 6px}
+  .stage-tag{padding-top:6px}
+}
+
+/* 手机横屏：宽而矮，两栏并排最省 */
+@media (orientation:landscape) and (max-height:560px){
+  main{
+    grid-template-columns:minmax(0,1fr) clamp(180px, 34%, 260px);
+    grid-template-rows:auto minmax(0,1fr);
+    grid-template-areas:"rx rx" "stage knobs";
+  }
+}
 
 </style>
 </head>
