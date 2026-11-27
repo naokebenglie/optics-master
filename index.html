@@ -954,8 +954,20 @@ footer::before{
 .st-tag.no{color:var(--ink-4)}
 
 /* 没买测厚仪：厚度条只留个虚影 */
-#edgefield.no-gauge .edge-bar{opacity:.45}
-#edgefield.no-gauge .band{display:none}
+/* 没买测厚仪：不给任何能判断「合不合格」的信息。
+   原来只藏了公差带，但填充条本身按 8mm 刻度显示长度、末端还会变色，
+   等于把答案透出去了 —— 现在整条读数和 8.0 刻度线一起藏掉，
+   只留一个空槽，表示「这里有块表，但你读不出来」。 */
+#edgefield.no-gauge .edge-bar i,
+#edgefield.no-gauge .edge-bar .limit,
+#edgefield.no-gauge .edge-bar .band{display:none}
+#edgefield.no-gauge .edge-bar{
+  border-style:dashed;
+  border-color:#2a3742;
+  background:
+    repeating-linear-gradient(45deg,rgba(90,110,130,.13) 0 6px,transparent 6px 12px),
+    var(--well);
+}
 
 /* ── 手机竖屏补充（放在最后，保证压得住前面同优先级的规则） ── */
 @media (max-width:560px){
@@ -3685,10 +3697,12 @@ function updateReadout(ev, es) {
   if (note) {
     const b = state.ground || !state.owned.thickness ? null : edgeBand(state.order, state.design);
     const risky = b && (b.max > fmax || b.min < 1) && !(b.nom > fmax || b.nom < 1);
-    const bad = !Number.isFinite(edge) || edge > fmax || edge < 1;
+    // 没有测厚仪时，note 不许变红 —— 红色本身就是「这片装不进框」的答案
+    const bad = state.owned.thickness &&
+      (!Number.isFinite(edge) || edge > fmax || edge < 1);
     note.style.color = bad || risky ? "var(--bad)" : "var(--ink-faint)";
     note.textContent = !state.owned.thickness
-      ? "没有测厚仪，公差带看不见（商城 ¥400）"
+      ? "没有测厚仪 —— 只看得见标称厚度，看不出会不会装不进框"
       : !Number.isFinite(edge)
         ? "这条弧做不出来"
         : edge > fmax
@@ -3735,7 +3749,13 @@ function updateReadout(ev, es) {
     // 度数对了，但机械上做不出来
     v.className = "verdict fail";
     const bad = ev.reasons.find((r) => r.code === "material" || r.code === "edge_thin");
-    vt.textContent = bad ? bad.text : "度数对了，但这片装不进框";
+    // 没买测厚仪就别把「装不进框」的结论白送出去 ——
+    // 否则玩家不买仪器照样知道结果，商城那 ¥400 就白标了
+    if (bad && bad.code === "edge_thin" && !state.owned.thickness) {
+      vt.textContent = "度数对了 —— 装不装得进框，得先有测厚仪量一量";
+    } else {
+      vt.textContent = bad ? bad.text : "度数对了，但这片装不进框";
+    }
   }
 }
 
